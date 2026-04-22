@@ -173,72 +173,27 @@ def get_audit_log():
     return st.session_state.get('audit_log', [])
 
 # ============================================
-# SECURE DATABASE ACCESS
+# DATABASE ACCESS (Hugging Face Datasets)
 # ============================================
 
-def get_db_config():
-    """Get database configuration securely"""
-    return {
-        'account_id': get_secret("CLOUDFLARE_ACCOUNT_ID"),
-        'api_token': get_secret("CLOUDFLARE_API_TOKEN"),
-        'database_id': get_secret("CLOUDFLARE_D1_DATABASE_ID")
-    }
-
 def is_db_configured():
-    """Check if database is properly configured"""
-    config = get_db_config()
-    return all([config['account_id'], config['api_token'], config['database_id']])
+    """Check if Hugging Face is properly configured"""
+    try:
+        from utils.hf_data import is_hf_configured
+        return is_hf_configured()
+    except:
+        return False
 
 def execute_query(sql, params=None):
     """
-    Execute a parameterized query against Cloudflare D1
-    ALWAYS use parameterized queries to prevent SQL injection
+    Execute a query using Hugging Face Datasets
+    Provides compatibility with existing SQL-style queries
     """
-    import requests
-    
-    config = get_db_config()
-    
-    if not all([config['account_id'], config['api_token'], config['database_id']]):
-        return None, "Database not configured"
-    
     try:
-        url = f"https://api.cloudflare.com/client/v4/accounts/{config['account_id']}/d1/database/{config['database_id']}/query"
-        headers = {
-            "Authorization": f"Bearer {config['api_token']}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {"sql": sql}
-        if params:
-            # Ensure params are properly sanitized
-            safe_params = []
-            for p in params:
-                if p is None:
-                    safe_params.append(None)
-                elif isinstance(p, (int, float)):
-                    safe_params.append(p)
-                else:
-                    safe_params.append(sanitize_string(str(p), 2000))
-            payload["params"] = safe_params
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success") and data.get("result"):
-                return data["result"][0].get("results", []), None
-            return [], None
-        
-        # Don't expose detailed error info
-        log_audit("db_error", f"Status: {response.status_code}")
-        return None, "Database query failed"
-        
-    except requests.exceptions.Timeout:
-        log_audit("db_timeout")
-        return None, "Database timeout"
+        from utils.hf_data import execute_query as hf_execute_query
+        return hf_execute_query(sql, params)
     except Exception as e:
-        log_audit("db_exception", str(type(e).__name__))
-        return None, "Database error"
+        return None, str(e)
 
 # ============================================
 # SESSION SECURITY

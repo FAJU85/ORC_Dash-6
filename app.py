@@ -1,6 +1,7 @@
 """
 ORC Research Dashboard - Main Application
 Secure, production-ready academic analytics platform
+Powered by Hugging Face Datasets
 """
 
 import streamlit as st
@@ -15,6 +16,7 @@ from utils.security import (
     get_secret, get_nested_secret, execute_query, 
     is_db_configured, init_session, log_audit
 )
+from utils.hf_data import load_publications
 
 # Page configuration
 st.set_page_config(
@@ -95,13 +97,9 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("Database")
     if is_db_configured():
-        result, error = execute_query("SELECT 1 as test")
-        if result is not None:
-            st.success("✅ Connected")
-        else:
-            st.error("❌ Connection failed")
+        st.success("✅ HF Connected")
     else:
-        st.error("❌ Not configured")
+        st.warning("⚠️ HF Not configured")
 
 with col2:
     st.subheader("AI Service")

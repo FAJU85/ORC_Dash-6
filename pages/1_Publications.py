@@ -1,6 +1,7 @@
 """
 ORC Research Dashboard - Publications Page
 Secure data fetching with input validation
+Using Hugging Face Datasets for storage
 """
 
 import streamlit as st
@@ -15,6 +16,7 @@ from utils.security import (
     get_secret, get_nested_secret, execute_query,
     sanitize_string, validate_orcid, log_audit, RateLimiter
 )
+from utils.hf_data import sync_from_openalex as hf_sync_from_openalex
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
 
@@ -22,11 +24,11 @@ st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
 rate_limiter = RateLimiter()
 
 # ============================================
-# SYNC FUNCTION
+# SYNC FUNCTION (Using Hugging Face Datasets)
 # ============================================
 
 def sync_from_openalex(orcid):
-    """Securely sync publications from OpenAlex"""
+    """Sync publications from OpenAlex using Hugging Face Datasets"""
     
     # Validate ORCID format
     if not validate_orcid(orcid):
@@ -40,59 +42,15 @@ def sync_from_openalex(orcid):
     rate_limiter.record_attempt(f"sync_{orcid}")
     log_audit("sync_start", f"ORCID: {orcid[:8]}***")
     
-    try:
-        # Fetch from OpenAlex
-        url = f"https://api.openalex.org/works?filter=authorships.author.orcid:{orcid}&per_page=100&sort=publication_year:desc"
-        resp = requests.get(url, headers={"User-Agent": "ORC-Dashboard/1.0"}, timeout=30)
-        
-        if resp.status_code != 200:
-            log_audit("sync_openalex_error", f"Status: {resp.status_code}")
-            return 0, "Could not fetch from OpenAlex"
-        
-        works = resp.json().get("results", [])
-        if not works:
-            return 0, "No publications found for this ORCID"
-        
-        inserted = 0
-        for work in works:
-            try:
-                work_id = sanitize_string(work.get("id", "").replace("https://openalex.org/", ""), 100)
-                doi = sanitize_string((work.get("doi") or "").replace("https://doi.org/", ""), 200) or None
-                title = sanitize_string(work.get("title") or "Untitled", 500)
-                abstract = sanitize_string(work.get("abstract") or "", 2000)
-                year = work.get("publication_year")
-                citations = int(work.get("cited_by_count", 0) or 0)
-                is_oa = 1 if work.get("open_access", {}).get("is_oa") else 0
-                
-                journal = ""
-                if work.get("primary_location", {}).get("source"):
-                    journal = sanitize_string(work["primary_location"]["source"].get("display_name", ""), 200)
-                
-                authors = [sanitize_string(a.get("author", {}).get("display_name", ""), 100) 
-                          for a in work.get("authorships", [])[:10]]
-                raw_data = json.dumps({"authors": authors})
-                
-                # Use parameterized query to prevent SQL injection
-                sql = """INSERT OR REPLACE INTO publications 
-                    (id, doi, title, abstract, publication_year, journal_name, citation_count, open_access, source, raw_data)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'openalex', ?)"""
-                
-                result, error = execute_query(sql, [work_id, doi, title, abstract, year, journal, citations, is_oa, raw_data])
-                
-                if error is None:
-                    inserted += 1
-            except Exception:
-                continue
-        
-        log_audit("sync_complete", f"Inserted: {inserted}")
-        return inserted, None
-        
-    except requests.exceptions.Timeout:
-        log_audit("sync_timeout")
-        return 0, "Request timed out"
-    except Exception as e:
-        log_audit("sync_error", str(type(e).__name__))
-        return 0, "Sync failed"
+    # Use HF Data module for syncing
+    count, error = hf_sync_from_openalex(orcid)
+    
+    if error:
+        log_audit("sync_error", error)
+        return 0, error
+    
+    log_audit("sync_complete", f"Inserted: {count}")
+    return count, None
 
 # ============================================
 # SESSION STATE

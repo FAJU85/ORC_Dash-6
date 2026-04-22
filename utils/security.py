@@ -4,6 +4,7 @@ Provides secure database access, input validation, and rate limiting
 """
 
 import streamlit as st
+import os
 import hashlib
 import secrets
 import re
@@ -16,16 +17,33 @@ from functools import wraps
 # ============================================
 
 def get_secret(key, default=""):
-    """Safely get a secret value without exposing errors"""
+    """Safely get a secret value - works with both local st.secrets and HF Spaces env vars"""
     try:
-        val = st.secrets.get(key, None)
-        return val if val else default
+        # First try environment variables (for Hugging Face Spaces)
+        val = os.environ.get(key, None)
+        if val:
+            return val
+        
+        # Fall back to st.secrets (for local development)
+        try:
+            val = st.secrets.get(key, None)
+            return val if val else default
+        except Exception:
+            return default
     except Exception:
         return default
 
 def get_nested_secret(section, key, default=""):
-    """Safely get nested secret like [researcher].name"""
+    """Safely get nested secret like [researcher].name - works with both local and HF Spaces"""
     try:
+        # Try environment variables first (for Hugging Face Spaces)
+        # HF secrets are prefixed with the section name
+        env_key = f"{section}_{key}".upper()
+        val = os.environ.get(env_key, None)
+        if val:
+            return val
+        
+        # Fall back to st.secrets (for local development)
         section_data = st.secrets.get(section, {})
         if hasattr(section_data, 'get'):
             return section_data.get(key, default) or default

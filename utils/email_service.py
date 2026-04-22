@@ -64,7 +64,7 @@ ORC Research Dashboard
         log_audit("otp_email_error", str(type(e).__name__))
         return False, "Email delivery failed"
 
-def send_bug_report_notification(summary, description, user_contact, github_url=None):
+def send_bug_report_notification(summary, full_description, user_contact, github_url=None):
     """Send bug report notification via Telegram"""
     import requests
     
@@ -75,6 +75,10 @@ def send_bug_report_notification(summary, description, user_contact, github_url=
         if not bot_token or not chat_id:
             return False, "Telegram not configured"
         
+        # Truncate description to 200 chars for Telegram message
+        desc_truncated = full_description[:200] if len(full_description) > 200 else full_description
+        ellipsis = '...' if len(full_description) > 200 else ''
+        
         message = f"""🐞 *NEW BUG REPORT*
 
 *Summary:* {summary[:100]}
@@ -82,7 +86,7 @@ def send_bug_report_notification(summary, description, user_contact, github_url=
 *From:* {user_contact or 'Anonymous'}
 
 *Description:*
-{description[:200]}{'...' if len(description) > 200 else ''}"""
+{desc_truncated}{ellipsis}"""
         
         if github_url:
             message += f"\n\n🔗 [View on GitHub]({github_url})"

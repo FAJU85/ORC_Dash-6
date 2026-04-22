@@ -19,9 +19,16 @@ from utils.security import (
 # Page configuration
 st.set_page_config(
     page_title="ORC Research Dashboard",
-    page_icon="🔬",
+    page_icon="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg",
     layout="wide"
 )
+
+# Add ORC Logo
+st.markdown("""
+<div style="text-align: center; margin-bottom: 1rem;">
+    <img src="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg" alt="ORC Logo" style="max-width: 300px; border-radius: 12px;">
+</div>
+""", unsafe_allow_html=True)
 
 # Initialize secure session
 init_session()

@@ -41,7 +41,11 @@ df = pd.DataFrame(pubs)
 st.header("📊 Overview")
 
 # Calculate h-index
-citations = sorted(df['citation_count'].fillna(0).tolist(), reverse=True)
+if 'citation_count' in df.columns:
+    citations = sorted(df['citation_count'].fillna(0).tolist(), reverse=True)
+else:
+    citations = []
+
 h_index = 0
 for i, c in enumerate(citations, 1):
     if c >= i:

@@ -16,312 +16,146 @@ from utils.security import (
     get_secret, get_nested_secret, execute_query, 
     is_db_configured, init_session, log_audit
 )
-from utils.hf_data import load_publications
+from utils.hf_data import load_publications, get_active_researchers
 
-# Page configuration
+# Page configuration - use sidebar for proper page navigation
 st.set_page_config(
     page_title="ORC Research Dashboard",
     page_icon="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
-# Initialize session state for theme
-if 'theme' not in st.session_state:
-    st.session_state.theme = "dark"
-
-# ============================================
-# THEME TOGGLE
-# ============================================
-
-def toggle_theme():
-    st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
-
-# ============================================
-# LIGHT THEME STYLES
-# ============================================
-
-LIGHT_THEME_STYLES = """
-<style>
-    /* Light Theme */
-    [data-theme="light"] .stApp {
-        background-color: #f8fafc;
-    }
-    
-    [data-theme="light"] .metric-card {
-        background: linear-gradient(135deg, #ffffff, #f1f5f9);
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-    }
-    
-    [data-theme="light"] .pub-item {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-    }
-    
-    [data-theme="light"] .stMetric label,
-    [data-theme="light"] .stMetric [data-testid="stMetricValue"] {
-        color: #1e293b !important;
-    }
-    
-    [data-theme="light"] h1, [data-theme="light"] h2, [data-theme="light"] h3 {
-        color: #1e293b !important;
-    }
-    
-    [data-theme="light"] .footer-link {
-        color: #475569;
-    }
-</style>
-"""
-
-# ============================================
-# NAVIGATION STYLES
-# ============================================
-
-NAV_STYLES = """
-<style>
-    /* Hide default sidebar */
-    [data-testid="stSidebar"] {
-        display: none;
-    }
-    
-    /* Top Navigation Bar */
-    .main-nav {
-        background: linear-gradient(90deg, #0f172a 0%, #1e3a5f 100%);
-        padding: 0.75rem 1.5rem;
-        border-radius: 0;
-        margin: -1rem -1rem 1rem -1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .nav-logo {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    
-    .nav-logo img {
-        width: 40px;
-        height: 40px;
-        border-radius: 8px;
-    }
-    
-    .nav-title {
-        color: white;
-        font-size: 1.25rem;
-        font-weight: 600;
-    }
-    
-    .nav-links {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-    }
-    
-    .nav-btn {
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        cursor: pointer;
-        text-decoration: none;
-        font-size: 0.9rem;
-        transition: all 0.2s;
-    }
-    
-    .nav-btn:hover {
-        background: rgba(255,255,255,0.2);
-    }
-    
-    .nav-btn.active {
-        background: #06b6d4;
-        border-color: #06b6d4;
-    }
-    
-    .theme-toggle {
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 1.2rem;
-        transition: all 0.2s;
-    }
-    
-    .theme-toggle:hover {
-        background: rgba(255,255,255,0.2);
-    }
-    
-    /* Light theme adjustments */
-    [data-theme="light"] .main-nav {
-        background: linear-gradient(90deg, #ffffff 0%, #f1f5f9 100%);
-        border-bottom: 1px solid #e2e8f0;
-    }
-    
-    [data-theme="light"] .nav-title {
-        color: #1e293b;
-    }
-    
-    [data-theme="light"] .nav-btn {
-        background: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-    }
-    
-    [data-theme="light"] .nav-btn:hover {
-        background: #e2e8f0;
-    }
-    
-    [data-theme="light"] .nav-btn.active {
-        background: #0ea5e9;
-        border-color: #0ea5e9;
-        color: white;
-    }
-    
-    [data-theme="light"] .theme-toggle {
-        background: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-    }
-    
-    /* Card Grid for Home */
-    .card-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 1rem;
-        padding: 1rem 0;
-    }
-    
-    .nav-card {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .nav-card:hover {
-        background: rgba(255,255,255,0.1);
-        transform: translateY(-2px);
-    }
-    
-    .nav-card-icon {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .nav-card-title {
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-    }
-    
-    .nav-card-desc {
-        color: rgba(255,255,255,0.6);
-        font-size: 0.85rem;
-    }
-    
-    [data-theme="light"] .nav-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-    }
-    
-    [data-theme="light"] .nav-card:hover {
-        background: #f8fafc;
-    }
-    
-    [data-theme="light"] .nav-card-title {
-        color: #1e293b;
-    }
-    
-    [data-theme="light"] .nav-card-desc {
-        color: #64748b;
-    }
-</style>
-"""
-
-# Apply theme-specific styles
-if st.session_state.theme == "light":
-    st.markdown(f'<html data-theme="light">{LIGHT_THEME_STYLES}</html>', unsafe_allow_html=True)
-st.markdown(NAV_STYLES, unsafe_allow_html=True)
-
-# ============================================
-# TOP NAVIGATION BAR
-# ============================================
-
-# Get current page
-current_page = st.query_params.get("page", "Home")
-
-# Navigation items
-nav_pages = {
-    "Home": "🏠",
-    "Publications": "📄",
-    "AI Assistant": "🤖",
-    "Analytics": "📊",
-    "Bug Report": "🐛",
-    "Settings": "⚙️",
-    "Admin": "🔐"
-}
-
-# Render top navigation
-st.markdown(f'''
-<div class="main-nav">
-    <div class="nav-logo">
-        <img src="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg" alt="ORC">
-        <span class="nav-title">ORC Dashboard</span>
-    </div>
-    <div class="nav-links">
-        {''.join([f'<a href="?page={name}" class="nav-btn {"active" if current_page == name else ""}">{icon} {name}</a>' for name, icon in nav_pages.items()])}
-        <button class="theme-toggle" onclick="toggle_theme()" title="Toggle Theme">{"☀️" if st.session_state.theme == "dark" else "🌙"}</button>
-    </div>
-</div>
-''', unsafe_allow_html=True)
-
-# Theme toggle JavaScript
-st.markdown('''
-<script>
-function toggle_theme() {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    // Store preference
-    localStorage.setItem('orc_theme', next);
-    // Reload to apply
-    window.location.reload();
-}
-</script>
-''', unsafe_allow_html=True)
-
-# Restore theme from localStorage on load
-st.markdown('''
-<script>
-// Restore theme from localStorage
-const savedTheme = localStorage.getItem('orc_theme');
-if (savedTheme) {
-    document.documentElement.setAttribute('data-theme', savedTheme);
-}
-</script>
-''', unsafe_allow_html=True)
-
-# Initialize secure session
+# Initialize session state
 init_session()
 
+# Theme toggle via query params
+if 'theme_mode' not in st.session_state:
+    st.session_state.theme_mode = "dark"
+
 # ============================================
-# MAIN PAGE
+# RESPONSIVE STYLES
 # ============================================
 
-st.title("🔬 ORC Research Dashboard")
-st.markdown("**AI-Powered Academic Analytics Platform**")
+st.markdown("""
+<style>
+    /* Hide Streamlit menu and footer */
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    .stDeployButton {display: none !important;}
+    
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .metric-row {
+            flex-direction: column !important;
+        }
+        .metric-col {
+            min-width: 100% !important;
+            margin-bottom: 0.5rem;
+        }
+        .nav-links {
+            flex-wrap: wrap !important;
+            justify-content: center !important;
+        }
+        .nav-btn {
+            font-size: 0.75rem !important;
+            padding: 0.4rem 0.6rem !important;
+        }
+    }
+    
+    /* Responsive columns */
+    .stColumn {
+        min-width: 150px;
+    }
+    
+    /* Better mobile layout */
+    .element-container {
+        width: 100% !important;
+    }
+    
+    /* Metric cards responsive */
+    .metric-card {
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    /* Footer responsive */
+    .footer-divider {
+        margin: 1rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================
+# THEME SYSTEM (via query params)
+# ============================================
+
+# Check for theme toggle
+params = st.query_params
+if "theme" in params:
+    if params["theme"] == "light":
+        st.session_state.theme_mode = "light"
+    else:
+        st.session_state.theme_mode = "dark"
+
+# Theme styles
+DARK_THEME = """
+<style>
+    .stApp { background-color: #0f172a; }
+    h1, h2, h3, h4, h5, h6, p, span { color: white !important; }
+    .stMetric label { color: #94a3b8 !important; }
+    .metric-card { background: #1e293b; border: 1px solid #334155; }
+    .pub-item { background: #1e293b; border-left: 3px solid #06b6d4; }
+    .status-card { background: #1e293b; }
+</style>
+"""
+
+LIGHT_THEME = """
+<style>
+    .stApp { background-color: #f8fafc; }
+    h1, h2, h3, h4, h5, h6, p, span { color: #1e293b !important; }
+    .stMetric label { color: #475569 !important; }
+    .stMetric [data-testid="stMetricValue"] { color: #1e293b !important; }
+    .metric-card { background: #ffffff; border: 1px solid #e2e8f0; }
+    .pub-item { background: #ffffff; border-left: 3px solid #0ea5e9; }
+    .status-card { background: #ffffff; border: 1px solid #e2e8f0; }
+</style>
+"""
+
+if st.session_state.theme_mode == "light":
+    st.markdown(LIGHT_THEME, unsafe_allow_html=True)
+else:
+    st.markdown(DARK_THEME, unsafe_allow_html=True)
+
+# ============================================
+# HEADER WITH THEME TOGGLE
+# ============================================
+
+col1, col2 = st.columns([6, 1])
+
+with col1:
+    st.title("🔬 ORC Research Dashboard")
+    st.markdown("**AI-Powered Academic Analytics Platform**")
+
+with col2:
+    st.write("")
+    st.write("")
+    # Theme toggle button
+    if st.session_state.theme_mode == "dark":
+        if st.button("☀️ Light Mode", use_container_width=True):
+            st.query_params["theme"] = "light"
+            st.rerun()
+    else:
+        if st.button("🌙 Dark Mode", use_container_width=True):
+            st.query_params["theme"] = "dark"
+            st.rerun()
 
 st.divider()
+
+# ============================================
+# MAIN PAGE CONTENT
+# ============================================
 
 # ============================================
 # SYSTEM STATUS

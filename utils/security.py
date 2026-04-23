@@ -218,3 +218,63 @@ def admin_logout():
     st.session_state.otp_code = None
     st.session_state.otp_expiry = None
     st.session_state.admin_email = None
+
+# ============================================
+# USER ROLES AND PERMISSIONS
+# ============================================
+
+def is_admin(orcid: str = None) -> bool:
+    """
+    Check if current user is admin
+    
+    Args:
+        orcid: Optional ORCID to check (defaults to current session ORCID)
+    
+    Returns:
+        True if user has admin role
+    """
+    # If admin_authenticated is set, they are admin
+    if st.session_state.get('admin_authenticated', False):
+        return True
+    
+    # Check admin ORCID list from secrets
+    admin_orcids = get_secret("ADMIN_ORCIDS", "").split(",")
+    admin_orcids = [o.strip() for o in admin_orcids if o.strip()]
+    
+    # Check current ORCID against admin list
+    current_orcid = orcid or st.session_state.get('orcid', '')
+    if current_orcid in admin_orcids:
+        return True
+    
+    return False
+
+def can_sync_publications() -> bool:
+    """
+    Check if current user can sync publications from OpenAlex
+    Only admins can sync
+    
+    Returns:
+        True if user has sync permission
+    """
+    return is_admin()
+
+def can_access_admin_panel() -> bool:
+    """
+    Check if current user can access admin panel
+    
+    Returns:
+        True if user has admin panel access
+    """
+    return is_admin()
+
+def get_user_role(orcid: str = None) -> str:
+    """
+    Get user's role
+    
+    Args:
+        orcid: ORCID to check (defaults to current session)
+    
+    Returns:
+        'admin' or 'user'
+    """
+    return 'admin' if is_admin(orcid) else 'user'

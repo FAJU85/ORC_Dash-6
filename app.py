@@ -22,60 +22,297 @@ from utils.hf_data import load_publications
 st.set_page_config(
     page_title="ORC Research Dashboard",
     page_icon="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# Add ORC Logo
-st.markdown("""
-<div style="text-align: center; margin-bottom: 1rem;">
-    <img src="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg" alt="ORC Logo" style="max-width: 300px; border-radius: 12px;">
-</div>
-""", unsafe_allow_html=True)
-
-# Initialize secure session
-init_session()
+# Initialize session state for theme
+if 'theme' not in st.session_state:
+    st.session_state.theme = "dark"
 
 # ============================================
-# CUSTOM STYLING
+# THEME TOGGLE
 # ============================================
 
-st.markdown("""
+def toggle_theme():
+    st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+
+# ============================================
+# LIGHT THEME STYLES
+# ============================================
+
+LIGHT_THEME_STYLES = """
 <style>
-    /* Material Design Dark Theme */
-    .stApp {
-        background-color: #0f172a;
+    /* Light Theme */
+    [data-theme="light"] .stApp {
+        background-color: #f8fafc;
     }
     
-    .metric-card {
-        background: linear-gradient(135deg, #1e3a5f, #0f172a);
+    [data-theme="light"] .metric-card {
+        background: linear-gradient(135deg, #ffffff, #f1f5f9);
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    
+    [data-theme="light"] .pub-item {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    
+    [data-theme="light"] .stMetric label,
+    [data-theme="light"] .stMetric [data-testid="stMetricValue"] {
+        color: #1e293b !important;
+    }
+    
+    [data-theme="light"] h1, [data-theme="light"] h2, [data-theme="light"] h3 {
+        color: #1e293b !important;
+    }
+    
+    [data-theme="light"] .footer-link {
+        color: #475569;
+    }
+</style>
+"""
+
+# ============================================
+# NAVIGATION STYLES
+# ============================================
+
+NAV_STYLES = """
+<style>
+    /* Hide default sidebar */
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+    
+    /* Top Navigation Bar */
+    .main-nav {
+        background: linear-gradient(90deg, #0f172a 0%, #1e3a5f 100%);
+        padding: 0.75rem 1.5rem;
+        border-radius: 0;
+        margin: -1rem -1rem 1rem -1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .nav-logo img {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+    
+    .nav-title {
+        color: white;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .nav-links {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .nav-btn {
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+    
+    .nav-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+    
+    .nav-btn.active {
+        background: #06b6d4;
+        border-color: #06b6d4;
+    }
+    
+    .theme-toggle {
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1.2rem;
+        transition: all 0.2s;
+    }
+    
+    .theme-toggle:hover {
+        background: rgba(255,255,255,0.2);
+    }
+    
+    /* Light theme adjustments */
+    [data-theme="light"] .main-nav {
+        background: linear-gradient(90deg, #ffffff 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    [data-theme="light"] .nav-title {
+        color: #1e293b;
+    }
+    
+    [data-theme="light"] .nav-btn {
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    
+    [data-theme="light"] .nav-btn:hover {
+        background: #e2e8f0;
+    }
+    
+    [data-theme="light"] .nav-btn.active {
+        background: #0ea5e9;
+        border-color: #0ea5e9;
+        color: white;
+    }
+    
+    [data-theme="light"] .theme-toggle {
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    
+    /* Card Grid for Home */
+    .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        padding: 1rem 0;
+    }
+    
+    .nav-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
         border-radius: 12px;
         padding: 1.5rem;
         text-align: center;
-        border: 1px solid #334155;
+        cursor: pointer;
+        transition: all 0.2s;
     }
     
-    .status-ok { color: #22c55e; }
-    .status-error { color: #ef4444; }
-    .status-warn { color: #fbbf24; }
-    
-    .pub-item {
-        background: #1e293b;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 0.75rem;
-        border-left: 3px solid #06b6d4;
+    .nav-card:hover {
+        background: rgba(255,255,255,0.1);
+        transform: translateY(-2px);
     }
     
-    .footer-link {
-        color: #94a3b8;
-        text-decoration: none;
+    .nav-card-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
     }
     
-    .footer-link:hover {
-        color: #06b6d4;
+    .nav-card-title {
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .nav-card-desc {
+        color: rgba(255,255,255,0.6);
+        font-size: 0.85rem;
+    }
+    
+    [data-theme="light"] .nav-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+    }
+    
+    [data-theme="light"] .nav-card:hover {
+        background: #f8fafc;
+    }
+    
+    [data-theme="light"] .nav-card-title {
+        color: #1e293b;
+    }
+    
+    [data-theme="light"] .nav-card-desc {
+        color: #64748b;
     }
 </style>
-""", unsafe_allow_html=True)
+"""
+
+# Apply theme-specific styles
+if st.session_state.theme == "light":
+    st.markdown(f'<html data-theme="light">{LIGHT_THEME_STYLES}</html>', unsafe_allow_html=True)
+st.markdown(NAV_STYLES, unsafe_allow_html=True)
+
+# ============================================
+# TOP NAVIGATION BAR
+# ============================================
+
+# Get current page
+current_page = st.query_params.get("page", "Home")
+
+# Navigation items
+nav_pages = {
+    "Home": "🏠",
+    "Publications": "📄",
+    "AI Assistant": "🤖",
+    "Analytics": "📊",
+    "Bug Report": "🐛",
+    "Settings": "⚙️",
+    "Admin": "🔐"
+}
+
+# Render top navigation
+st.markdown(f'''
+<div class="main-nav">
+    <div class="nav-logo">
+        <img src="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg" alt="ORC">
+        <span class="nav-title">ORC Dashboard</span>
+    </div>
+    <div class="nav-links">
+        {''.join([f'<a href="?page={name}" class="nav-btn {"active" if current_page == name else ""}">{icon} {name}</a>' for name, icon in nav_pages.items()])}
+        <button class="theme-toggle" onclick="toggle_theme()" title="Toggle Theme">{"☀️" if st.session_state.theme == "dark" else "🌙"}</button>
+    </div>
+</div>
+''', unsafe_allow_html=True)
+
+# Theme toggle JavaScript
+st.markdown('''
+<script>
+function toggle_theme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    // Store preference
+    localStorage.setItem('orc_theme', next);
+    // Reload to apply
+    window.location.reload();
+}
+</script>
+''', unsafe_allow_html=True)
+
+# Restore theme from localStorage on load
+st.markdown('''
+<script>
+// Restore theme from localStorage
+const savedTheme = localStorage.getItem('orc_theme');
+if (savedTheme) {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+}
+</script>
+''', unsafe_allow_html=True)
+
+# Initialize secure session
+init_session()
 
 # ============================================
 # MAIN PAGE

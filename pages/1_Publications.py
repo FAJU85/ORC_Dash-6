@@ -14,7 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import (
     get_secret, get_nested_secret, execute_query,
-    sanitize_string, validate_orcid, log_audit, RateLimiter
+    sanitize_string, validate_orcid, log_audit, RateLimiter,
+    can_sync_publications, is_admin
 )
 from utils.hf_data import sync_from_openalex as hf_sync_from_openalex
 
@@ -70,23 +71,28 @@ st.title("📚 Publications")
 # SYNC SECTION
 st.header("🔄 Sync from OpenAlex")
 
-col1, col2 = st.columns([3, 1])
+# Check if user can sync
+if can_sync_publications():
+    col1, col2 = st.columns([3, 1])
 
-with col1:
-    default_orcid = get_nested_secret("researcher", "orcid", "")
-    orcid = st.text_input("ORCID ID", value=default_orcid, placeholder="0000-0000-0000-0000")
+    with col1:
+        default_orcid = get_nested_secret("researcher", "orcid", "")
+        orcid = st.text_input("ORCID ID", value=default_orcid, placeholder="0000-0000-0000-0000")
 
-with col2:
-    st.write("")
-    if st.button("🔄 Sync Now", type="primary", use_container_width=True):
-        with st.spinner("Syncing publications..."):
-            count, error = sync_from_openalex(orcid)
-            if error:
-                st.error(f"❌ {error}")
-            else:
-                st.success(f"✅ Synced {count} publications!")
-                st.cache_data.clear()
-                st.rerun()
+    with col2:
+        st.write("")
+        if st.button("🔄 Sync Now", type="primary", use_container_width=True):
+            with st.spinner("Syncing publications..."):
+                count, error = sync_from_openalex(orcid)
+                if error:
+                    st.error(f"❌ {error}")
+                else:
+                    st.success(f"✅ Synced {count} publications!")
+                    st.cache_data.clear()
+                    st.rerun()
+else:
+    st.info("🔒 **Sync functionality is restricted to administrators only.**")
+    st.markdown("*Only admins can sync publications from OpenAlex.*")
 
 st.divider()
 

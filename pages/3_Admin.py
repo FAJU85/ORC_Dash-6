@@ -17,6 +17,10 @@ from utils.security import (
     execute_query, is_db_configured
 )
 from utils.email_service import send_otp_email
+from utils.hf_data import (
+    get_active_researchers, add_researcher, remove_researcher,
+    load_publications, sync_from_openalex, load_researchers
+)
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
 
@@ -267,23 +271,83 @@ else:
                 st.metric("Latest Year", s.get("latest_year", "N/A"))
     
     with tab2:
-        st.header("Manage Researchers")
+        st.header("👥 Manage Researchers")
         
-        st.subheader("Primary Researcher")
+        # Add new researcher section
+        st.subheader("➕ Add New Researcher")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.text_input("Name", value=get_nested_secret("researcher", "name", "Not set"), disabled=True)
-            st.text_input("Institution", value=get_nested_secret("researcher", "institution", "Not set"), disabled=True)
+            new_orcid = st.text_input("ORCID", placeholder="0000-0000-0000-0000", key="new_orcid")
         with col2:
-            st.text_input("ORCID", value=get_nested_secret("researcher", "orcid", "Not set"), disabled=True)
+            new_name = st.text_input("Name", placeholder="Researcher Name", key="new_name")
+        with col3:
+            new_institution = st.text_input("Institution", placeholder="University/Organization", key="new_institution")
         
-        st.info("📝 To edit researcher info, update the `[researcher]` section in Streamlit Secrets")
+        if st.button("Add Researcher", type="primary"):
+            if new_orcid:
+                success, error = add_researcher(
+                    orcid=new_orcid,
+                    name=new_name,
+                    institution=new_institution
+                )
+                if success:
+                    st.success(f"✅ Added researcher: {new_name or new_orcid}")
+                    log_audit("researcher_added", new_orcid)
+                    st.rerun()
+                else:
+                    st.error(f"❌ {error}")
+            else:
+                st.warning("Please enter an ORCID")
         
         st.divider()
         
-        st.subheader("Add Additional Researchers")
-        st.info("🚧 Feature coming soon: Multi-author support")
+        # List existing researchers
+        st.subheader("📋 Current Researchers")
+        
+        researchers = get_active_researchers()
+        
+        if researchers:
+            for r in researchers:
+                with st.container():
+                    col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{r.get('name', 'Unknown') or r.get('orcid', '')[:8]}...**")
+                        st.caption(f"ORCID: {r.get('orcid', 'N/A')}")
+                    
+                    with col2:
+                        st.caption(f"🏛️ {r.get('institution', 'Not specified')}")
+                    
+                    with col3:
+                        # Count publications for this researcher
+                        pubs = load_publications(orcid=r.get('orcid'))
+                        st.caption(f"📄 {len(pubs)} publications")
+                    
+                    with col4:
+                        if st.button("🔄 Sync", key=f"sync_{r.get('orcid')}", help="Sync publications from OpenAlex"):
+                            with st.spinner("Syncing..."):
+                                count, error = sync_from_openalex(r.get('orcid'))
+                                if error:
+                                    st.error(f"❌ {error}")
+                                else:
+                                    st.success(f"✅ +{count} publications")
+                                    log_audit("researcher_sync", f"{r.get('orcid')}: +{count}")
+                                    st.rerun()
+                    
+                    with col5:
+                        if st.button("🗑️", key=f"del_{r.get('orcid')}", help="Remove researcher"):
+                            success, err = remove_researcher(r.get('orcid'))
+                            if success:
+                                st.success("✅ Researcher removed")
+                                log_audit("researcher_removed", r.get('orcid'))
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {err}")
+                    
+                    st.divider()
+        else:
+            st.info("No researchers added yet. Use the form above to add your first researcher.")
     
     with tab3:
         st.header("System Settings")

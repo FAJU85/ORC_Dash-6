@@ -1,6 +1,7 @@
 """
 ORC Research Dashboard - Hugging Face Data Storage
 Stores publications using Hugging Face Datasets
+Supports multiple researchers
 """
 
 import os
@@ -20,7 +21,6 @@ except ImportError:
 
 def get_repo_id():
     """Get the Hugging Face repo ID for data storage"""
-    # Get from environment variable or use default pattern
     repo_id = os.environ.get("HF_REPO_ID", "")
     if repo_id:
         return repo_id
@@ -28,7 +28,6 @@ def get_repo_id():
 
 def get_hf_token():
     """Get Hugging Face token from secrets/environment"""
-    # Try HF_TOKEN first, then fall back to other names
     token = os.environ.get("HF_TOKEN", "")
     if token:
         return token
@@ -39,11 +38,11 @@ def is_hf_configured():
     return HF_AVAILABLE and get_hf_token() and get_repo_id()
 
 # ============================================
-# DATA STORAGE (Using JSON file in HF Dataset)
+# RESEARCHERS MANAGEMENT
 # ============================================
 
-def load_publications():
-    """Load publications from Hugging Face Dataset"""
+def load_researchers():
+    """Load researchers list from Hugging Face Dataset"""
     try:
         api = HfApi(token=get_hf_token())
         repo_id = get_repo_id()
@@ -52,7 +51,105 @@ def load_publications():
             return []
         
         try:
-            # Try to download existing data file
+            local_path = hf_hub_download(
+                repo_id=repo_id,
+                filename="researchers.json",
+                repo_type="dataset"
+            )
+            with open(local_path, 'r') as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+        except Exception:
+            return []
+            
+    except Exception:
+        return []
+
+def save_researchers(researchers):
+    """Save researchers list to Hugging Face Dataset"""
+    try:
+        api = HfApi(token=get_hf_token())
+        repo_id = get_repo_id()
+        
+        if not repo_id:
+            return False, "HF_REPO_ID not configured"
+        
+        temp_path = "/tmp/researchers.json"
+        with open(temp_path, 'w') as f:
+            json.dump(researchers, f, indent=2, default=str)
+        
+        api.upload_file(
+            path_or_fileobj=temp_path,
+            path_in_repo="researchers.json",
+            repo_id=repo_id,
+            repo_type="dataset",
+            commit_message="Update researchers list"
+        )
+        
+        return True, None
+        
+    except Exception as e:
+        return False, str(e)
+
+def add_researcher(orcid, name="", institution="", email=""):
+    """Add a new researcher"""
+    researchers = load_researchers()
+    
+    # Check if already exists
+    for r in researchers:
+        if r.get('orcid') == orcid:
+            return False, "Researcher with this ORCID already exists"
+    
+    researcher = {
+        'orcid': orcid,
+        'name': name or f"Researcher {orcid[-4:]}",
+        'institution': institution,
+        'email': email,
+        'added_at': datetime.now().isoformat(),
+        'active': True
+    }
+    
+    researchers.append(researcher)
+    success, error = save_researchers(researchers)
+    
+    if error:
+        return False, error
+    
+    return True, None
+
+def remove_researcher(orcid):
+    """Remove a researcher (soft delete - keeps publications)"""
+    researchers = load_researchers()
+    
+    for r in researchers:
+        if r.get('orcid') == orcid:
+            r['active'] = False
+    
+    success, error = save_researchers(researchers)
+    return success, error
+
+def get_active_researchers():
+    """Get list of active researchers"""
+    researchers = load_researchers()
+    return [r for r in researchers if r.get('active', True)]
+
+# ============================================
+# DATA STORAGE (Using JSON file in HF Dataset)
+# ============================================
+
+def load_publications(orcid=None):
+    """
+    Load publications from Hugging Face Dataset
+    If orcid is provided, filter by researcher ORCID
+    """
+    try:
+        api = HfApi(token=get_hf_token())
+        repo_id = get_repo_id()
+        
+        if not repo_id:
+            return []
+        
+        try:
             local_path = hf_hub_download(
                 repo_id=repo_id,
                 filename="publications.json",
@@ -60,10 +157,15 @@ def load_publications():
             )
             with open(local_path, 'r') as f:
                 data = json.load(f)
-                return data if isinstance(data, list) else []
+                all_publications = data if isinstance(data, list) else []
         except Exception:
-            # File doesn't exist yet, return empty list
             return []
+        
+        # Filter by ORCID if specified
+        if orcid:
+            return [p for p in all_publications if p.get('orcid') == orcid]
+        
+        return all_publications
             
     except Exception as e:
         print(f"Error loading publications: {e}")
@@ -78,12 +180,10 @@ def save_publications(publications):
         if not repo_id:
             return False, "HF_REPO_ID not configured"
         
-        # Save to temp file
         temp_path = "/tmp/publications.json"
         with open(temp_path, 'w') as f:
             json.dump(publications, f, indent=2, default=str)
         
-        # Upload to HF
         api.upload_file(
             path_or_fileobj=temp_path,
             path_in_repo="publications.json",
@@ -101,23 +201,23 @@ def add_publication(pub_data):
     """Add or update a single publication"""
     publications = load_publications()
     
-    # Check if publication already exists
     existing_ids = [p.get('id') for p in publications]
     
     if pub_data.get('id') in existing_ids:
-        # Update existing
         for i, p in enumerate(publications):
             if p.get('id') == pub_data.get('id'):
                 publications[i] = pub_data
                 break
     else:
-        # Add new
         publications.append(pub_data)
     
     return save_publications(publications)
 
 def sync_from_openalex(orcid, api_client=None):
-    """Sync publications from OpenAlex API"""
+    """
+    Sync publications from OpenAlex API
+    Associates publications with the specific researcher ORCID
+    """
     import requests
     
     try:
@@ -139,7 +239,6 @@ def sync_from_openalex(orcid, api_client=None):
             work_id = work.get("id", "").replace("https://openalex.org/", "")
             doi = (work.get("doi") or "").replace("https://doi.org/", "") or None
             
-            # Skip if already exists
             if work_id in existing_ids:
                 continue
             
@@ -155,6 +254,7 @@ def sync_from_openalex(orcid, api_client=None):
                 "source": "openalex",
                 "authors": [a.get("author", {}).get("display_name", "") 
                            for a in work.get("authorships", [])[:10]],
+                "orcid": orcid,  # Link to researcher
                 "synced_at": datetime.now().isoformat()
             }
             publications.append(pub)

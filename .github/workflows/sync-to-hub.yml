@@ -2,7 +2,7 @@ name: Sync to Hugging Face
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/multi-researcher]
   workflow_dispatch:  # Manual trigger
 
 env:

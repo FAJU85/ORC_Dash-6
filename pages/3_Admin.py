@@ -49,12 +49,34 @@ for key, default in [
 
 st.title("🔐 Administrator Panel")
 
-admin_email = get_nested_secret("admin", "email")
-admin_hash  = get_nested_secret("admin", "password_hash")
+# Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
+admin_email    = get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email", "")
+admin_password = get_secret("ADMIN_PASSWORD") or get_nested_secret("admin", "password", "")
+admin_hash     = get_nested_secret("admin", "password_hash", "")
+
+# If a plain-text password is provided, hash it on the fly
+if admin_password and not admin_hash:
+    admin_hash = hash_password(admin_password)
 
 if not admin_email or not admin_hash:
     st.warning("⚠️ Administrator account not configured")
-    st.info("Contact system administrator to set up admin access.")
+    st.markdown("""
+    ### Setup required — add the following to your secrets:
+
+    | Secret | Value |
+    |--------|-------|
+    | `ADMIN_EMAIL` | your@email.com |
+    | `ADMIN_PASSWORD` | your_password |
+
+    **Or use a pre-hashed password (recommended):**
+
+    | Secret | Value |
+    |--------|-------|
+    | `ADMIN_EMAIL` | your@email.com |
+    | `admin.password_hash` | bcrypt or SHA-256 hash |
+
+    See `SECRETS_TEMPLATE.toml` for full instructions.
+    """)
     st.stop()
 
 # ============================================

@@ -16,7 +16,7 @@ from utils.security import (
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex
-from utils.ui import apply_theme
+from utils.ui import apply_theme, render_footer, render_empty_state
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
 apply_theme()
@@ -96,7 +96,10 @@ if error:
     st.stop()
 
 if not pubs:
-    st.info("📭 No publications in database. Click **Sync Now** to fetch from OpenAlex.")
+    render_empty_state(
+        "No publications yet",
+        "Use the Sync section above to pull publications from OpenAlex.",
+    )
     st.stop()
 
 # ── Researcher Filter ───────────────────────────────────────────────────────
@@ -262,7 +265,7 @@ for pub in page_items:
         if doi:
             st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
 
-    st.divider()
+    st.markdown("<div class='pub-card-wrap'></div>", unsafe_allow_html=True)
 
 # ── Pagination Controls ─────────────────────────────────────────────────────
 if total_pages > 1:
@@ -288,6 +291,8 @@ if total_pages > 1:
         if st.button("Last ⏭", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page = total_pages
             st.rerun()
+
+render_footer()
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 if st.session_state.get("selected_paper"):

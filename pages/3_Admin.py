@@ -23,7 +23,7 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log
 )
-from utils.ui import apply_theme, render_system_status
+from utils.ui import apply_theme, render_system_status, render_footer
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
 apply_theme()
@@ -138,13 +138,7 @@ if not st.session_state.admin_authenticated:
                         log_audit("otp_send_failed", error)
 
         st.divider()
-        st.markdown(
-            "<div style='text-align:center;color:#64748b;font-size:0.85rem;'>"
-            "🔒 Two-factor authentication required<br>"
-            "A verification code will be sent to your email"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
@@ -207,10 +201,14 @@ else:
     # ADMIN DASHBOARD
     # ============================================
 
-    st.success("✅ Logged in as Administrator")
-    if st.button("🚪 Logout"):
-        admin_logout()
-        st.rerun()
+    header_col, logout_col = st.columns([5, 1])
+    with header_col:
+        st.success("✅ Logged in as Administrator")
+    with logout_col:
+        st.write("")
+        if st.button("🚪 Logout", use_container_width=True):
+            admin_logout()
+            st.rerun()
 
     st.divider()
 
@@ -383,20 +381,13 @@ else:
 
                 st.markdown(
                     f"<div style='padding:0.25rem 0;border-left:3px solid {color};padding-left:0.6rem;margin-bottom:0.2rem'>"
-                    f"<span style='color:#94a3b8;font-size:0.8rem'>{ts}</span> "
+                    f"<span class='text-muted' style='font-size:0.8rem'>{ts}</span> "
                     f"{icon} <strong>{action}</strong>"
-                    + (f" <span style='color:#94a3b8'>{detail}</span>" if detail else "")
+                    + (f" <span class='text-muted'>{detail}</span>" if detail else "")
                     + "</div>",
                     unsafe_allow_html=True,
                 )
         else:
             st.info("No audit events recorded yet.")
 
-# ── Footer ─────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "🔒 Secure Admin Panel · All actions are logged"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer(note="🔒 Secure Admin Panel · All actions are logged")

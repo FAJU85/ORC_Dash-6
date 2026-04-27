@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import get_secret, sanitize_string, log_audit, RateLimiter
-from utils.ui import apply_theme
+from utils.ui import apply_theme, render_footer
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
 apply_theme()
@@ -202,10 +202,4 @@ if user_input:
             st.session_state.chat_history.append({"role": "assistant", "content": f"⚠️ {error}"})
     st.rerun()
 
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "Select a paper from Publications for detailed analysis"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer(note="Select a paper from Publications for context-aware analysis.")

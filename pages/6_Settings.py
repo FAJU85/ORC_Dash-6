@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.security import get_nested_secret
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-from utils.ui import apply_theme, render_system_status
+from utils.ui import apply_theme, render_system_status, render_footer
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
 apply_theme()
@@ -191,10 +191,4 @@ An AI-powered academic research analytics platform.
 - 🔐 [Admin Panel](/Admin) (administrators only)
 """)
 
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.85rem;'>"
-    "Powered by <a href='https://www.linkedin.com/in/fahad-al-jubalie-55973926/' target='_blank'>Fahad Al-Jubalie</a>"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer()

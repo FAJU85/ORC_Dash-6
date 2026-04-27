@@ -15,7 +15,7 @@ from utils.security import (
     get_nested_secret, execute_query, init_session, log_audit
 )
 from utils.hf_data import load_publications, get_active_researchers
-from utils.ui import apply_theme, theme_toggle_button, render_system_status
+from utils.ui import apply_theme, theme_toggle_button, render_system_status, render_footer, render_empty_state
 
 # Page configuration - use sidebar for proper page navigation
 st.set_page_config(
@@ -104,7 +104,12 @@ if metrics and len(metrics) > 0:
     with col5:
         st.metric("🔓 Open Access", m.get("oa_count", 0) or 0)
 else:
-    st.info("📭 No publications data. Use **Publications** page to sync from OpenAlex.")
+    render_empty_state(
+        "No publications yet",
+        "Sync your ORCID to pull publications from OpenAlex.",
+        cta_label="Go to Publications →",
+        cta_page="pages/1_Publications.py",
+    )
 
 st.divider()
 
@@ -132,11 +137,16 @@ if pubs and len(pubs) > 0:
         st.markdown(f"""
         <div class="pub-item">
             <strong>{title}</strong><br>
-            <span style="color: #94a3b8;">📰 {journal} • {year} • {citations} citations</span>
+            <span class="text-muted">📰 {journal} • {year} • {citations} citations</span>
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.info("No publications yet. Use the **Publications** page to sync from OpenAlex.")
+    render_empty_state(
+        "No recent publications",
+        "Sync your ORCID to pull publications from OpenAlex.",
+        cta_label="Go to Publications →",
+        cta_page="pages/1_Publications.py",
+    )
 
 st.divider()
 
@@ -158,20 +168,4 @@ with col2:
 with col3:
     st.markdown(f"**Institution:** {institution}")
 
-# ============================================
-# FOOTER
-# ============================================
-
-st.divider()
-
-st.markdown("""
-<div style="text-align: center; color: #64748b; font-size: 0.85rem;">
-    <p>ORC Research Dashboard v1.0</p>
-    <p>
-        Powered by 
-        <a href="https://www.linkedin.com/in/fahad-al-jubalie-55973926/" target="_blank" class="footer-link">
-            Fahad Al-Jubalie
-        </a>
-    </p>
-</div>
-""", unsafe_allow_html=True)
+render_footer()

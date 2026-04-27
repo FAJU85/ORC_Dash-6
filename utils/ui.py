@@ -27,6 +27,7 @@ _COMMON_CSS = """
     .stColumn { min-width: 150px; }
     .metric-card { padding: 1rem; border-radius: 8px; text-align: center; }
     .footer-divider { margin: 1rem 0; }
+    .pub-card-wrap { margin-bottom: 1.25rem; }
 </style>
 """
 
@@ -176,3 +177,50 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
                 st.success("✅ Configured")
             else:
                 st.info("ℹ️ Optional")
+
+
+def render_empty_state(
+    title: str,
+    message: str,
+    cta_label: str = "",
+    cta_page: str = "",
+) -> None:
+    """Render a centred empty-state card with an optional call-to-action link.
+
+    Args:
+        title:     Short headline (e.g. "No publications yet").
+        message:   One-sentence explanation of what to do next.
+        cta_label: Button / link label text. Omit to show no CTA.
+        cta_page:  Streamlit page path for st.page_link (e.g. "pages/1_Publications.py").
+    """
+    st.markdown(
+        f"<div style='text-align:center;padding:2.5rem 1rem;'>"
+        f"<div style='font-size:2.5rem;margin-bottom:0.5rem'>📭</div>"
+        f"<p style='font-size:1.1rem;font-weight:600;margin-bottom:0.25rem'>{title}</p>"
+        f"<p class='text-muted' style='margin-bottom:1rem'>{message}</p>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    if cta_label and cta_page:
+        _, btn_col, _ = st.columns([2, 1, 2])
+        with btn_col:
+            st.page_link(cta_page, label=cta_label, use_container_width=True)
+
+
+def render_footer(note: str = "") -> None:
+    """Render the standard page footer with an optional page-specific note above it.
+
+    Args:
+        note: Short contextual sentence shown as a caption above the divider.
+    """
+    if note:
+        st.caption(note)
+    st.divider()
+    st.markdown(
+        "<div style='text-align:center;font-size:0.85rem;'>"
+        "<span class='text-muted'>ORC Research Dashboard v1.0 · Powered by "
+        "<a href='https://www.linkedin.com/in/fahad-al-jubalie-55973926/' "
+        "target='_blank' style='color:#06b6d4;text-decoration:none;'>Fahad Al-Jubalie</a>"
+        "</span></div>",
+        unsafe_allow_html=True,
+    )

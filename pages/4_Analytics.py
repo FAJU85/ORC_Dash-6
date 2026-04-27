@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import execute_query
 from utils.hf_data import get_active_researchers, load_publications
-from utils.ui import apply_theme, get_chart_theme
+from utils.ui import apply_theme, get_chart_theme, render_footer, render_empty_state
 
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
 apply_theme()
@@ -41,7 +41,12 @@ else:
     pubs = pubs or []
 
 if not pubs:
-    st.info("📭 No data available. Sync publications from the **Publications** page first.")
+    render_empty_state(
+        "No publications to visualise",
+        "Sync publications first to see charts and analytics.",
+        cta_label="Go to Publications →",
+        cta_page="pages/1_Publications.py",
+    )
     st.stop()
 
 df = pd.DataFrame(pubs)
@@ -154,3 +159,5 @@ if 'citation_count' in df.columns:
                        color_discrete_sequence=['#f59e0b'])
     fig.update_layout(**get_chart_theme())
     st.plotly_chart(fig, use_container_width=True)
+
+render_footer()

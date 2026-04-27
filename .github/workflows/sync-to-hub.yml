@@ -2,7 +2,7 @@ name: Sync to Hugging Face
 
 on:
   push:
-    branches: [main, feature/multi-researcher]
+    branches: [main]
   workflow_dispatch:  # Manual trigger
 
 env:
@@ -22,6 +22,6 @@ jobs:
         uses: huggingface/hub-sync@v0.1.0
         with:
           github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: vooom/orc_dash_1
+          huggingface_repo_id: ${{ secrets.HF_SPACE_ID }}
           repo_type: space
           hf_token: ${{ secrets.HF_TOKEN }}

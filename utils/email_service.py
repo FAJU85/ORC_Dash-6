@@ -146,7 +146,7 @@ def create_github_issue(summary, description, steps, expected_actual, user_conta
         payload = {
             "title": f"[Bug] {summary[:100]}",
             "body": body,
-            "labels": ["bug", "from-streamlit"]
+            "labels": ["bug", "from-dashboard"]
         }
         
         response = requests.post(url, headers=headers, json=payload, timeout=10)

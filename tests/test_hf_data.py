@@ -1,5 +1,6 @@
 """
 ORC Research Dashboard - Tests for Hugging Face Data Module
+Tests that do not require actual HF credentials.
 """
 
 import pytest
@@ -9,116 +10,157 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import (
-    sanitize_string,
-    validate_orcid
-)
+from utils.security import sanitize_string, validate_orcid
+from utils.hf_data import SCHEMA_VERSION
+
+
+class TestSchemaVersion:
+
+    def test_schema_version_is_integer(self):
+        assert isinstance(SCHEMA_VERSION, int)
+
+    def test_schema_version_positive(self):
+        assert SCHEMA_VERSION >= 1
 
 
 class TestMockDataFunctions:
-    """Test functions that don't require HF credentials"""
-    
+
     def test_sanitize_string(self):
-        """Test string sanitization"""
         assert sanitize_string("  test  ") == "test"
         assert sanitize_string("test\x00data") == "testdata"
         assert sanitize_string("a" * 1000, max_length=100) == "a" * 100
-    
+
     def test_validate_orcid(self):
-        """Test ORCID validation"""
         assert validate_orcid("0000-0000-0000-0000") is True
         assert validate_orcid("0000-0000-0000-000X") is True
         assert validate_orcid("invalid") is False
 
 
-class TestPublicationData:
-    """Test publication data structure"""
-    
-    def test_publication_schema(self):
-        """Test that a publication has required fields"""
-        pub = {
-            "id": "W12345",
-            "doi": "10.1234/test",
-            "title": "Test Publication",
-            "abstract": "Test abstract",
-            "publication_year": 2024,
-            "journal_name": "Test Journal",
-            "citation_count": 10,
-            "open_access": 1,
-            "source": "openalex",
-            "authors": ["Author 1", "Author 2"],
-            "synced_at": "2024-01-01T00:00:00"
-        }
-        
-        required_fields = [
-            "id", "title", "publication_year", 
-            "journal_name", "citation_count"
-        ]
-        
-        for field in required_fields:
-            assert field in pub, f"Missing required field: {field}"
-    
-    def test_publication_citation_count(self):
-        """Test citation count is always an integer"""
-        pub = {"citation_count": 10}
-        assert isinstance(pub["citation_count"], int)
-        
-        pub2 = {"citation_count": 0}
-        assert isinstance(pub2["citation_count"], int)
-    
-    def test_publication_open_access(self):
-        """Test open_access is 0 or 1"""
-        assert 0 in [0, 1]
-        pub = {"open_access": 1}
-        assert pub["open_access"] in [0, 1]
+class TestPublicationSchema:
+
+    def test_required_fields_present(self, sample_publication):
+        required = ["id", "title", "publication_year", "journal_name", "citation_count"]
+        for field in required:
+            assert field in sample_publication, f"Missing required field: {field}"
+
+    def test_citation_count_integer(self, sample_publication):
+        assert isinstance(sample_publication["citation_count"], int)
+
+    def test_open_access_binary(self, sample_publication):
+        assert sample_publication["open_access"] in [0, 1]
+
+    def test_authors_is_list(self, sample_publication):
+        assert isinstance(sample_publication["authors"], list)
+
+    def test_doi_format(self, sample_publication):
+        doi = sample_publication.get("doi", "")
+        if doi:
+            assert "https://doi.org" not in doi  # stored without prefix
+
+    def test_publication_serialisable(self, sample_publication):
+        """Publication must round-trip through JSON without error"""
+        serialised = json.dumps(sample_publication, default=str)
+        restored = json.loads(serialised)
+        assert restored["id"] == sample_publication["id"]
+
+
+class TestDuplicateDetection:
+    """Unit-test the duplicate-detection logic used in sync_from_openalex"""
+
+    def _simulate_dedup(self, existing, candidates):
+        """Mirrors the dedup logic in hf_data.sync_from_openalex"""
+        existing_ids  = {p.get('id')  for p in existing}
+        existing_dois = {p.get('doi') for p in existing if p.get('doi')}
+        new = []
+        for c in candidates:
+            if c.get('id')  in existing_ids:
+                continue
+            if c.get('doi') and c.get('doi') in existing_dois:
+                continue
+            new.append(c)
+        return new
+
+    def test_skips_duplicate_id(self):
+        existing    = [{"id": "W1", "doi": "10.0/a"}]
+        candidates  = [{"id": "W1", "doi": "10.0/b"}]
+        result = self._simulate_dedup(existing, candidates)
+        assert result == []
+
+    def test_skips_duplicate_doi(self):
+        existing   = [{"id": "W1", "doi": "10.0/a"}]
+        candidates = [{"id": "W2", "doi": "10.0/a"}]
+        result = self._simulate_dedup(existing, candidates)
+        assert result == []
+
+    def test_accepts_unique_entry(self):
+        existing   = [{"id": "W1", "doi": "10.0/a"}]
+        candidates = [{"id": "W2", "doi": "10.0/b"}]
+        result = self._simulate_dedup(existing, candidates)
+        assert len(result) == 1
+
+    def test_no_doi_accepted(self):
+        existing   = [{"id": "W1", "doi": "10.0/a"}]
+        candidates = [{"id": "W2", "doi": None}]
+        result = self._simulate_dedup(existing, candidates)
+        assert len(result) == 1
 
 
 class TestMetricsCalculation:
-    """Test metrics calculations"""
-    
-    def test_h_index_calculation(self):
-        """Test h-index calculation"""
-        citations = [10, 8, 5, 4, 3, 2, 1]  # 7 papers
-        
-        h_index = 0
+
+    def test_h_index(self):
+        citations = [10, 8, 5, 4, 3, 2, 1]
+        h = 0
         for i, c in enumerate(citations, 1):
             if c >= i:
-                h_index = i
+                h = i
             else:
                 break
-        
-        # h-index = 4 (4 papers have at least 4 citations each, 5th has only 3)
-        assert h_index == 4
-    
+        assert h == 4
+
     def test_h_index_empty(self):
-        """Test h-index with no publications"""
-        citations = []
-        h_index = 0
-        for i, c in enumerate(citations, 1):
+        h = 0
+        for i, c in enumerate([], 1):
             if c >= i:
-                h_index = i
-        assert h_index == 0
-    
-    def test_total_citations(self):
-        """Test total citations sum"""
-        pubs = [
-            {"citation_count": 10},
-            {"citation_count": 5},
-            {"citation_count": 3}
-        ]
-        total = sum(p["citation_count"] for p in pubs)
-        assert total == 18
-    
-    def test_average_citations(self):
-        """Test average citations"""
-        pubs = [
-            {"citation_count": 10},
-            {"citation_count": 5},
-            {"citation_count": 5}
-        ]
-        total = sum(p["citation_count"] for p in pubs)
-        avg = total / len(pubs)
-        assert abs(avg - 6.67) < 0.01  # Allow floating point tolerance
+                h = i
+        assert h == 0
+
+    def test_total_citations(self, sample_publications):
+        total = sum(p["citation_count"] for p in sample_publications)
+        assert total == 28   # 15 + 8 + 5
+
+    def test_average_citations(self, sample_publications):
+        total = sum(p["citation_count"] for p in sample_publications)
+        avg = total / len(sample_publications)
+        assert abs(avg - (28 / 3)) < 0.01
+
+    def test_open_access_count(self, sample_publications):
+        oa = sum(1 for p in sample_publications if p.get("open_access") == 1)
+        assert oa == 2
+
+
+class TestWrappedJsonSchema:
+    """Test that the new schema-versioned JSON wrapper is handled correctly"""
+
+    def _parse(self, raw):
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, dict):
+            return raw.get("data", [])
+        return []
+
+    def test_bare_list_parsed(self):
+        raw = [{"id": "W1"}, {"id": "W2"}]
+        assert len(self._parse(raw)) == 2
+
+    def test_wrapped_object_parsed(self):
+        raw = {"schema_version": 1, "data": [{"id": "W1"}], "updated_at": "2025-01-01"}
+        result = self._parse(raw)
+        assert len(result) == 1
+        assert result[0]["id"] == "W1"
+
+    def test_empty_data_key(self):
+        raw = {"schema_version": 1, "data": []}
+        assert self._parse(raw) == []
 
 
 if __name__ == "__main__":

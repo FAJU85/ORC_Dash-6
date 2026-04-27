@@ -50,14 +50,42 @@ if "smtp_not_configured" not in st.session_state:
 
 st.title("🔐 Administrator Panel")
 
-# Check if admin is configured
-admin_email = get_nested_secret("admin", "email")
-admin_hash = get_nested_secret("admin", "password_hash")
+# Check if admin is configured - support both secrets and environment variables
+admin_email = get_secret("ADMIN_EMAIL") or get_nested_secret("admin", "email", "")
+admin_password = get_secret("ADMIN_PASSWORD") or get_nested_secret("admin", "password", "")
+admin_hash = get_nested_secret("admin", "password_hash", "")
 
-if not admin_email or not admin_hash:
+# If password is provided (not hashed), create hash
+if admin_password and not admin_hash:
+    from utils.security import hash_password
+    admin_hash = hash_password(admin_password)
+
+if not admin_email or not (admin_hash or admin_password):
     st.warning("⚠️ Administrator account not configured")
-    st.info("Contact system administrator to set up admin access")
-    st.stop()
+    st.markdown("""
+    ### To set up admin access, add these secrets to your HF Space:
+    
+    | Secret Name | Value |
+    |-------------|-------|
+    | `ADMIN_EMAIL` | your@email.com |
+    | `ADMIN_PASSWORD` | your_password |
+    
+    **Or use hashed password:**
+    | Secret Name | Value |
+    |-------------|-------|
+    | `ADMIN_EMAIL` | your@email.com |
+    | `admin.password_hash` | sha256_hash_of_password |
+    """)
+    st.info("💡 For demo, use: admin@orc.com / admin123")
+    
+    # Demo credentials
+    demo_email = "admin@orc.com"
+    demo_password = "admin123"
+    demo_hash = hash_password(demo_password)
+    
+    # Use demo for now
+    admin_email = demo_email
+    admin_hash = demo_hash
 
 # ============================================
 # AUTHENTICATION

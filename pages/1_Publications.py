@@ -234,8 +234,10 @@ for pub in page_items:
         if authors:
             auth_str = ", ".join(str(a) for a in authors[:3] if a)
             if len(authors) > 3:
-                auth_str += f" +{len(authors) - 3} more"
-            st.markdown(f"👥 {auth_str}")
+                with st.expander(f"👥 {auth_str} +{len(authors) - 3} more"):
+                    st.write(", ".join(str(a) for a in authors if a))
+            else:
+                st.markdown(f"👥 {auth_str}")
         oa_badge = " • 🔓 OA" if is_oa else ""
         st.markdown(f"📰 **{journal}** • {year} • 📈 {citations} citations{oa_badge}")
 

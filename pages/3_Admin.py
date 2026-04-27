@@ -359,11 +359,36 @@ else:
 
         audit_log = get_audit_log()
         if audit_log:
+            # Classify actions so security failures stand out visually
+            _DANGER  = {"login_wrong_email", "login_wrong_password", "login_rate_limited",
+                        "otp_wrong_code", "otp_expired", "otp_rate_limited", "otp_invalid_format"}
+            _WARNING = {"otp_sent", "otp_demo_mode", "sync_error", "ai_error",
+                        "bug_report_submitted"}
+            _SUCCESS = {"admin_login_success", "sync_complete", "researcher_added",
+                        "researcher_removed", "researcher_sync", "cache_cleared"}
+
             for entry in reversed(audit_log[-50:]):
                 ts     = entry.get('timestamp', '')[:19]
                 action = entry.get('action', 'unknown')
                 detail = entry.get('details', '')
-                st.markdown(f"`{ts}` **{action}** {detail}")
+
+                if action in _DANGER:
+                    icon, color = "🔴", "#ef4444"
+                elif action in _WARNING:
+                    icon, color = "🟡", "#f59e0b"
+                elif action in _SUCCESS:
+                    icon, color = "🟢", "#22c55e"
+                else:
+                    icon, color = "⚪", "#94a3b8"
+
+                st.markdown(
+                    f"<div style='padding:0.25rem 0;border-left:3px solid {color};padding-left:0.6rem;margin-bottom:0.2rem'>"
+                    f"<span style='color:#94a3b8;font-size:0.8rem'>{ts}</span> "
+                    f"{icon} <strong>{action}</strong>"
+                    + (f" <span style='color:#94a3b8'>{detail}</span>" if detail else "")
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
         else:
             st.info("No audit events recorded yet.")
 

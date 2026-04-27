@@ -149,7 +149,17 @@ with col4:
 st.divider()
 
 # ── Chat Interface ──────────────────────────────────────────────────────────
-st.header("💬 Chat")
+chat_header_col, clear_col = st.columns([5, 1])
+with chat_header_col:
+    st.header("💬 Chat")
+with clear_col:
+    st.write("")
+    st.write("")
+    if st.session_state.chat_history:
+        if st.button("🗑️ Clear", use_container_width=True, help="Clear chat history"):
+            st.session_state.chat_history = []
+            log_audit("chat_cleared")
+            st.rerun()
 
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
@@ -191,12 +201,6 @@ if user_input:
             st.warning(f"⚠️ {error}")
             st.session_state.chat_history.append({"role": "assistant", "content": f"⚠️ {error}"})
     st.rerun()
-
-if st.session_state.chat_history:
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.chat_history = []
-        log_audit("chat_cleared")
-        st.rerun()
 
 st.divider()
 st.markdown(

@@ -36,6 +36,11 @@ st.title("⚙️ Settings")
 st.markdown("Customize your dashboard experience")
 st.divider()
 
+# Load a small sample for the inline citation preview (cheap, cached by Streamlit)
+from utils.security import execute_query as _eq
+_preview_pubs, _ = _eq("SELECT * FROM publications ORDER BY citation_count DESC LIMIT 3")
+_preview_pubs = _preview_pubs or []
+
 # ── Display Preferences ─────────────────────────────────────────────────────
 st.header("🎨 Display Preferences")
 
@@ -56,6 +61,10 @@ with col1:
         ),
         help="Default format for citation display and exports",
     )
+    if _preview_pubs:
+        with st.expander("📖 Citation Preview"):
+            for pub in _preview_pubs:
+                st.markdown(f"• {format_citation(pub, citation_style)}")
 
 with col2:
     show_abstracts = st.toggle(
@@ -148,15 +157,8 @@ if export_pubs:
         file_name=fname,
         mime=mime,
         type="primary",
-        use_container_width=False,
+        use_container_width=True,
     )
-
-    # Citation preview
-    if export_pubs:
-        with st.expander("📖 Citation Preview (first 3 papers)"):
-            style = citation_style
-            for pub in export_pubs[:3]:
-                st.markdown(f"• {format_citation(pub, style)}")
 
 else:
     st.info("No publications found. Sync publications from the Publications page first.")

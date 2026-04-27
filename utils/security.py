@@ -1,6 +1,6 @@
 """
 ORC Research Dashboard - Security Utilities
-Provides secure database access, input validation, and rate limiting
+Provides secure database access, input validation, and rate limiting.
 """
 
 import streamlit as st
@@ -9,8 +9,19 @@ import hashlib
 import secrets
 import re
 import time
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
+
+# ============================================
+# MODULE-LEVEL STORES (shared across all sessions)
+# ============================================
+
+_rate_limit_lock = threading.Lock()
+_rate_limit_store: dict = {}   # key -> {attempts: [...], blocked_until: float}
+
+_audit_lock = threading.Lock()
+_audit_log: list = []           # in-memory audit log (all sessions)
 
 # ============================================
 # SECURE SECRET ACCESS
@@ -19,12 +30,9 @@ from functools import wraps
 def get_secret(key, default=""):
     """Safely get a secret value - works with both local st.secrets and HF Spaces env vars"""
     try:
-        # First try environment variables (for Hugging Face Spaces)
         val = os.environ.get(key, None)
         if val:
             return val
-        
-        # Fall back to st.secrets (for local development)
         try:
             val = st.secrets.get(key, None)
             return val if val else default
@@ -34,16 +42,12 @@ def get_secret(key, default=""):
         return default
 
 def get_nested_secret(section, key, default=""):
-    """Safely get nested secret like [researcher].name - works with both local and HF Spaces"""
+    """Safely get nested secret like [researcher].name"""
     try:
-        # Try environment variables first (for Hugging Face Spaces)
-        # HF secrets are prefixed with the section name
         env_key = f"{section}_{key}".upper()
         val = os.environ.get(env_key, None)
         if val:
             return val
-        
-        # Fall back to st.secrets (for local development)
         section_data = st.secrets.get(section, {})
         if hasattr(section_data, 'get'):
             return section_data.get(key, default) or default
@@ -59,11 +63,8 @@ def sanitize_string(value, max_length=500):
     """Sanitize string input to prevent injection"""
     if not value:
         return ""
-    # Convert to string and strip
     value = str(value).strip()
-    # Remove null bytes
     value = value.replace('\x00', '')
-    # Limit length
     value = value[:max_length]
     return value
 
@@ -92,8 +93,28 @@ def validate_otp(otp):
 # ============================================
 
 def hash_password(password):
-    """Hash password with salt"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password using bcrypt with random salt"""
+    try:
+        import bcrypt
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
+    except ImportError:
+        return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, stored_hash):
+    """
+    Verify password against stored hash.
+    Supports both bcrypt (new) and SHA-256 (legacy) hashes.
+    """
+    if not password or not stored_hash:
+        return False
+    try:
+        import bcrypt
+        if stored_hash.startswith(('$2b$', '$2a$', '$2y$')):
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+    except (ImportError, ValueError):
+        pass
+    # Legacy SHA-256 fallback
+    return hashlib.sha256(password.encode()).hexdigest() == stored_hash
 
 def generate_otp():
     """Generate secure 6-digit OTP"""
@@ -104,73 +125,92 @@ def generate_session_token():
     return secrets.token_urlsafe(32)
 
 # ============================================
-# RATE LIMITING
+# RATE LIMITING (module-level, shared across sessions)
 # ============================================
 
 class RateLimiter:
-    """Simple in-memory rate limiter"""
-    
-    def __init__(self):
-        if 'rate_limit_data' not in st.session_state:
-            st.session_state.rate_limit_data = {}
-    
+    """
+    Rate limiter backed by a module-level dict so limits are enforced
+    across all user sessions within the same server process.
+    """
+
     def is_allowed(self, key, max_attempts=5, window_seconds=300):
         """Check if action is allowed within rate limit"""
         now = time.time()
-        data = st.session_state.rate_limit_data.get(key, {'attempts': [], 'blocked_until': 0})
-        
-        # Check if currently blocked
-        if now < data.get('blocked_until', 0):
-            return False, int(data['blocked_until'] - now)
-        
-        # Clean old attempts
-        data['attempts'] = [t for t in data.get('attempts', []) if now - t < window_seconds]
-        
-        # Check if over limit
-        if len(data['attempts']) >= max_attempts:
-            data['blocked_until'] = now + window_seconds
-            st.session_state.rate_limit_data[key] = data
-            return False, window_seconds
-        
-        return True, 0
-    
+        with _rate_limit_lock:
+            data = _rate_limit_store.get(key, {'attempts': [], 'blocked_until': 0})
+
+            if now < data.get('blocked_until', 0):
+                return False, int(data['blocked_until'] - now)
+
+            data['attempts'] = [t for t in data.get('attempts', []) if now - t < window_seconds]
+
+            if len(data['attempts']) >= max_attempts:
+                data['blocked_until'] = now + window_seconds
+                _rate_limit_store[key] = data
+                return False, window_seconds
+
+            _rate_limit_store[key] = data
+            return True, 0
+
     def record_attempt(self, key):
         """Record an attempt"""
         now = time.time()
-        if key not in st.session_state.rate_limit_data:
-            st.session_state.rate_limit_data[key] = {'attempts': [], 'blocked_until': 0}
-        st.session_state.rate_limit_data[key]['attempts'].append(now)
-    
+        with _rate_limit_lock:
+            if key not in _rate_limit_store:
+                _rate_limit_store[key] = {'attempts': [], 'blocked_until': 0}
+            _rate_limit_store[key]['attempts'].append(now)
+
     def reset(self, key):
         """Reset rate limit for a key"""
-        if key in st.session_state.rate_limit_data:
-            del st.session_state.rate_limit_data[key]
+        with _rate_limit_lock:
+            _rate_limit_store.pop(key, None)
 
 # ============================================
-# AUDIT LOGGING
+# AUDIT LOGGING (module-level, shared across sessions)
 # ============================================
 
 def log_audit(action, details="", user="anonymous"):
-    """Log security-relevant actions"""
-    if 'audit_log' not in st.session_state:
-        st.session_state.audit_log = []
-    
+    """Log security-relevant actions to the module-level audit log"""
     entry = {
         'timestamp': datetime.now().isoformat(),
         'action': action,
         'details': sanitize_string(details, 200),
         'user': sanitize_string(user, 100)
     }
-    
-    st.session_state.audit_log.append(entry)
-    
-    # Keep only last 100 entries
-    if len(st.session_state.audit_log) > 100:
-        st.session_state.audit_log = st.session_state.audit_log[-100:]
+    with _audit_lock:
+        _audit_log.append(entry)
+        if len(_audit_log) > 500:
+            _audit_log[:] = _audit_log[-500:]
+
+    # Best-effort persistence to HF
+    try:
+        from utils.hf_data import append_audit_entry
+        append_audit_entry(entry)
+    except Exception:
+        pass
 
 def get_audit_log():
-    """Get audit log (admin only)"""
-    return st.session_state.get('audit_log', [])
+    """Return the current in-memory audit log (newest last)"""
+    with _audit_lock:
+        return list(_audit_log)
+
+def load_audit_log_from_hf():
+    """Load persisted audit log from HF Dataset into the module-level list"""
+    global _audit_log
+    try:
+        from utils.hf_data import load_audit_log as hf_load
+        entries = hf_load()
+        if entries:
+            with _audit_lock:
+                existing_ts = {e['timestamp'] for e in _audit_log}
+                for e in entries:
+                    if e.get('timestamp') not in existing_ts:
+                        _audit_log.append(e)
+                _audit_log.sort(key=lambda x: x.get('timestamp', ''))
+                _audit_log[:] = _audit_log[-500:]
+    except Exception:
+        pass
 
 # ============================================
 # DATABASE ACCESS (Hugging Face Datasets)
@@ -181,14 +221,11 @@ def is_db_configured():
     try:
         from utils.hf_data import is_hf_configured
         return is_hf_configured()
-    except:
+    except Exception:
         return False
 
 def execute_query(sql, params=None):
-    """
-    Execute a query using Hugging Face Datasets
-    Provides compatibility with existing SQL-style queries
-    """
+    """Execute a query using Hugging Face Datasets"""
     try:
         from utils.hf_data import execute_query as hf_execute_query
         return hf_execute_query(sql, params)
@@ -207,7 +244,7 @@ def init_session():
         st.session_state.session_start = datetime.now().isoformat()
 
 def is_admin_authenticated():
-    """Check if admin is authenticated"""
+    """Check if admin is authenticated in this session"""
     return st.session_state.get('admin_authenticated', False)
 
 def admin_logout():
@@ -224,57 +261,22 @@ def admin_logout():
 # ============================================
 
 def is_admin(orcid: str = None) -> bool:
-    """
-    Check if current user is admin
-    
-    Args:
-        orcid: Optional ORCID to check (defaults to current session ORCID)
-    
-    Returns:
-        True if user has admin role
-    """
-    # If admin_authenticated is set, they are admin
+    """Check if current user is admin"""
     if st.session_state.get('admin_authenticated', False):
         return True
-    
-    # Check admin ORCID list from secrets
     admin_orcids = get_secret("ADMIN_ORCIDS", "").split(",")
     admin_orcids = [o.strip() for o in admin_orcids if o.strip()]
-    
-    # Check current ORCID against admin list
     current_orcid = orcid or st.session_state.get('orcid', '')
-    if current_orcid in admin_orcids:
-        return True
-    
-    return False
+    return current_orcid in admin_orcids
 
 def can_sync_publications() -> bool:
-    """
-    Check if current user can sync publications from OpenAlex
-    Only admins can sync
-    
-    Returns:
-        True if user has sync permission
-    """
+    """Check if current user can sync publications from OpenAlex"""
     return is_admin()
 
 def can_access_admin_panel() -> bool:
-    """
-    Check if current user can access admin panel
-    
-    Returns:
-        True if user has admin panel access
-    """
+    """Check if current user can access admin panel"""
     return is_admin()
 
 def get_user_role(orcid: str = None) -> str:
-    """
-    Get user's role
-    
-    Args:
-        orcid: ORCID to check (defaults to current session)
-    
-    Returns:
-        'admin' or 'user'
-    """
+    """Get user's role ('admin' or 'user')"""
     return 'admin' if is_admin(orcid) else 'user'

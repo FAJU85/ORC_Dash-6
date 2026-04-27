@@ -136,7 +136,7 @@ col1, col2 = st.columns([6, 1])
 
 with col1:
     st.title("🔬 ORC Research Dashboard")
-    st.markdown("**AI-Powered Academic Analytics Platform**")
+    st.markdown("**Academic Analytics & Publication Intelligence Platform**")
 
 with col2:
     st.write("")
@@ -179,6 +179,7 @@ with col2:
         st.success("✅ Ready")
     else:
         st.warning("⚠️ Not configured")
+
 
 with col3:
     st.subheader("OpenAlex")

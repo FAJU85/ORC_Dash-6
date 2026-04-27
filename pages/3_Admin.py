@@ -23,8 +23,10 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log
 )
+from utils.ui import apply_theme
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
+apply_theme()
 
 rate_limiter = RateLimiter()
 

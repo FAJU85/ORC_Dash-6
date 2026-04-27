@@ -11,9 +11,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.security import get_secret, get_nested_secret, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
+from utils.ui import apply_theme
 import requests
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
+apply_theme()
 
 # ============================================
 # SESSION STATE

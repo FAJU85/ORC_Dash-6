@@ -9,8 +9,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import get_secret, sanitize_string, log_audit, RateLimiter
+from utils.ui import apply_theme
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
+apply_theme()
 
 rate_limiter = RateLimiter()
 

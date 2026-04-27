@@ -13,10 +13,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.security import (
-    get_secret, get_nested_secret, execute_query, 
+    get_secret, get_nested_secret, execute_query,
     is_db_configured, init_session, log_audit
 )
 from utils.hf_data import load_publications, get_active_researchers
+from utils.ui import apply_theme, theme_toggle_button
 
 # Page configuration - use sidebar for proper page navigation
 st.set_page_config(
@@ -29,104 +30,8 @@ st.set_page_config(
 # Initialize session state
 init_session()
 
-# Theme toggle via query params
-if 'theme_mode' not in st.session_state:
-    st.session_state.theme_mode = "dark"
-
-# ============================================
-# RESPONSIVE STYLES
-# ============================================
-
-st.markdown("""
-<style>
-    /* Hide Streamlit menu and footer */
-    #MainMenu {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
-    .stDeployButton {display: none !important;}
-    
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .metric-row {
-            flex-direction: column !important;
-        }
-        .metric-col {
-            min-width: 100% !important;
-            margin-bottom: 0.5rem;
-        }
-        .nav-links {
-            flex-wrap: wrap !important;
-            justify-content: center !important;
-        }
-        .nav-btn {
-            font-size: 0.75rem !important;
-            padding: 0.4rem 0.6rem !important;
-        }
-    }
-    
-    /* Responsive columns */
-    .stColumn {
-        min-width: 150px;
-    }
-    
-    /* Better mobile layout */
-    .element-container {
-        width: 100% !important;
-    }
-    
-    /* Metric cards responsive */
-    .metric-card {
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-    }
-    
-    /* Footer responsive */
-    .footer-divider {
-        margin: 1rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================
-# THEME SYSTEM (via query params)
-# ============================================
-
-# Check for theme toggle
-params = st.query_params
-if "theme" in params:
-    if params["theme"] == "light":
-        st.session_state.theme_mode = "light"
-    else:
-        st.session_state.theme_mode = "dark"
-
-# Theme styles
-DARK_THEME = """
-<style>
-    .stApp { background-color: #0f172a; }
-    h1, h2, h3, h4, h5, h6, p, span { color: white !important; }
-    .stMetric label { color: #94a3b8 !important; }
-    .metric-card { background: #1e293b; border: 1px solid #334155; }
-    .pub-item { background: #1e293b; border-left: 3px solid #06b6d4; }
-    .status-card { background: #1e293b; }
-</style>
-"""
-
-LIGHT_THEME = """
-<style>
-    .stApp { background-color: #f8fafc; }
-    h1, h2, h3, h4, h5, h6, p, span { color: #1e293b !important; }
-    .stMetric label { color: #475569 !important; }
-    .stMetric [data-testid="stMetricValue"] { color: #1e293b !important; }
-    .metric-card { background: #ffffff; border: 1px solid #e2e8f0; }
-    .pub-item { background: #ffffff; border-left: 3px solid #0ea5e9; }
-    .status-card { background: #ffffff; border: 1px solid #e2e8f0; }
-</style>
-"""
-
-if st.session_state.theme_mode == "light":
-    st.markdown(LIGHT_THEME, unsafe_allow_html=True)
-else:
-    st.markdown(DARK_THEME, unsafe_allow_html=True)
+# Apply shared theme (handles session state, query params, and CSS injection)
+apply_theme()
 
 # ============================================
 # HEADER WITH THEME TOGGLE
@@ -141,15 +46,7 @@ with col1:
 with col2:
     st.write("")
     st.write("")
-    # Theme toggle button
-    if st.session_state.theme_mode == "dark":
-        if st.button("☀️ Light Mode", use_container_width=True):
-            st.query_params["theme"] = "light"
-            st.rerun()
-    else:
-        if st.button("🌙 Dark Mode", use_container_width=True):
-            st.query_params["theme"] = "dark"
-            st.rerun()
+    theme_toggle_button()
 
 st.divider()
 
@@ -256,7 +153,8 @@ pubs, err = execute_query("""
 
 if pubs and len(pubs) > 0:
     for pub in pubs:
-        title = pub.get('title', 'Untitled')[:100]
+        raw_title = pub.get('title', 'Untitled')
+        title = raw_title[:100] + ("…" if len(raw_title) > 100 else "")
         journal = pub.get('journal_name', 'Unknown')
         year = pub.get('publication_year', '')
         citations = pub.get('citation_count', 0) or 0

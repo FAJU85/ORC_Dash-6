@@ -16,8 +16,10 @@ from utils.security import (
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex
+from utils.ui import apply_theme
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
+apply_theme()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()

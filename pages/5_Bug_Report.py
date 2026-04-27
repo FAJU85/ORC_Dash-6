@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import sanitize_string, validate_email, log_audit, RateLimiter
 from utils.email_service import send_bug_report_notification, create_github_issue
+from utils.ui import apply_theme
 
-st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="centered")
+st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="wide")
+apply_theme()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()

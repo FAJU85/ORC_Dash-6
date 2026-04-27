@@ -76,10 +76,10 @@ if not admin_email or not (admin_hash or admin_password):
     | `ADMIN_EMAIL` | your@email.com |
     | `admin.password_hash` | sha256_hash_of_password |
     """)
-    st.info("💡 For demo, use: admin@orc.com / admin123")
+    st.info("💡 For demo, use: ee.ee455@gmail.com / admin123")
     
     # Demo credentials
-    demo_email = "admin@orc.com"
+    demo_email = "ee.ee455@gmail.com"
     demo_password = "admin123"
     demo_hash = hash_password(demo_password)
     

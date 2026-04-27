@@ -23,8 +23,10 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log
 )
+from utils.ui import apply_theme, render_system_status, render_footer
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
+apply_theme()
 
 rate_limiter = RateLimiter()
 
@@ -136,13 +138,7 @@ if not st.session_state.admin_authenticated:
                         log_audit("otp_send_failed", error)
 
         st.divider()
-        st.markdown(
-            "<div style='text-align:center;color:#64748b;font-size:0.85rem;'>"
-            "🔒 Two-factor authentication required<br>"
-            "A verification code will be sent to your email"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
@@ -205,10 +201,14 @@ else:
     # ADMIN DASHBOARD
     # ============================================
 
-    st.success("✅ Logged in as Administrator")
-    if st.button("🚪 Logout"):
-        admin_logout()
-        st.rerun()
+    header_col, logout_col = st.columns([5, 1])
+    with header_col:
+        st.success("✅ Logged in as Administrator")
+    with logout_col:
+        st.write("")
+        if st.button("🚪 Logout", use_container_width=True):
+            admin_logout()
+            st.rerun()
 
     st.divider()
 
@@ -218,31 +218,7 @@ else:
     with tab1:
         st.header("System Overview")
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.subheader("Database")
-            if is_db_configured():
-                st.success("✅ Connected")
-            else:
-                st.error("❌ Not configured")
-        with c2:
-            st.subheader("AI Service")
-            if get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Not set")
-        with c3:
-            st.subheader("Email (SMTP)")
-            if get_nested_secret("smtp", "user"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Demo mode")
-        with c4:
-            st.subheader("Notifications")
-            if get_nested_secret("telegram", "bot_token"):
-                st.success("✅ Configured")
-            else:
-                st.info("ℹ️ Optional")
+        render_system_status(show_email=True, show_telegram=True)
 
         st.divider()
         st.header("📊 Statistics")
@@ -293,6 +269,20 @@ else:
 
         researchers = get_active_researchers()
         if researchers:
+            # Header row
+            hc1, hc2, hc3, hc4, hc5 = st.columns([3, 2, 1, 1, 1])
+            with hc1:
+                st.caption("**Researcher**")
+            with hc2:
+                st.caption("**Institution**")
+            with hc3:
+                st.caption("**Pubs**")
+            with hc4:
+                st.caption("**Sync**")
+            with hc5:
+                st.caption("**Remove**")
+            st.divider()
+
             for r in researchers:
                 with st.container():
                     c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1])
@@ -367,19 +357,37 @@ else:
 
         audit_log = get_audit_log()
         if audit_log:
+            # Classify actions so security failures stand out visually
+            _DANGER  = {"login_wrong_email", "login_wrong_password", "login_rate_limited",
+                        "otp_wrong_code", "otp_expired", "otp_rate_limited", "otp_invalid_format"}
+            _WARNING = {"otp_sent", "otp_demo_mode", "sync_error", "ai_error",
+                        "bug_report_submitted"}
+            _SUCCESS = {"admin_login_success", "sync_complete", "researcher_added",
+                        "researcher_removed", "researcher_sync", "cache_cleared"}
+
             for entry in reversed(audit_log[-50:]):
                 ts     = entry.get('timestamp', '')[:19]
                 action = entry.get('action', 'unknown')
                 detail = entry.get('details', '')
-                st.markdown(f"`{ts}` **{action}** {detail}")
+
+                if action in _DANGER:
+                    icon, color = "🔴", "#ef4444"
+                elif action in _WARNING:
+                    icon, color = "🟡", "#f59e0b"
+                elif action in _SUCCESS:
+                    icon, color = "🟢", "#22c55e"
+                else:
+                    icon, color = "⚪", "#94a3b8"
+
+                st.markdown(
+                    f"<div style='padding:0.25rem 0;border-left:3px solid {color};padding-left:0.6rem;margin-bottom:0.2rem'>"
+                    f"<span class='text-muted' style='font-size:0.8rem'>{ts}</span> "
+                    f"{icon} <strong>{action}</strong>"
+                    + (f" <span class='text-muted'>{detail}</span>" if detail else "")
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
         else:
             st.info("No audit events recorded yet.")
 
-# ── Footer ─────────────────────────────────────────────────────────────────
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "🔒 Secure Admin Panel · All actions are logged"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer(note="🔒 Secure Admin Panel · All actions are logged")

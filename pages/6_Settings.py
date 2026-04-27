@@ -8,12 +8,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import get_secret, get_nested_secret, is_db_configured
+from utils.security import get_nested_secret
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-import requests
+from utils.ui import apply_theme, render_system_status, render_footer
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
+apply_theme()
 
 # ============================================
 # SESSION STATE
@@ -35,6 +36,11 @@ st.title("⚙️ Settings")
 st.markdown("Customize your dashboard experience")
 st.divider()
 
+# Load a small sample for the inline citation preview (cheap, cached by Streamlit)
+from utils.security import execute_query as _eq
+_preview_pubs, _ = _eq("SELECT * FROM publications ORDER BY citation_count DESC LIMIT 3")
+_preview_pubs = _preview_pubs or []
+
 # ── Display Preferences ─────────────────────────────────────────────────────
 st.header("🎨 Display Preferences")
 
@@ -55,6 +61,10 @@ with col1:
         ),
         help="Default format for citation display and exports",
     )
+    if _preview_pubs:
+        with st.expander("📖 Citation Preview"):
+            for pub in _preview_pubs:
+                st.markdown(f"• {format_citation(pub, citation_style)}")
 
 with col2:
     show_abstracts = st.toggle(
@@ -147,15 +157,8 @@ if export_pubs:
         file_name=fname,
         mime=mime,
         type="primary",
-        use_container_width=False,
+        use_container_width=True,
     )
-
-    # Citation preview
-    if export_pubs:
-        with st.expander("📖 Citation Preview (first 3 papers)"):
-            style = citation_style
-            for pub in export_pubs[:3]:
-                st.markdown(f"• {format_citation(pub, style)}")
 
 else:
     st.info("No publications found. Sync publications from the Publications page first.")
@@ -165,29 +168,7 @@ st.divider()
 # ── Connection Status ───────────────────────────────────────────────────────
 st.header("🔌 Connection Status")
 
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.subheader("Database")
-    if is_db_configured():
-        st.success("✅ Connected")
-    else:
-        st.error("❌ Not configured")
-with c2:
-    st.subheader("AI Service")
-    if get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"):
-        st.success("✅ Available")
-    else:
-        st.warning("⚠️ Not available")
-with c3:
-    st.subheader("OpenAlex")
-    try:
-        r = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
-        if r.status_code == 200:
-            st.success("✅ Online")
-        else:
-            st.warning("⚠️ Unavailable")
-    except Exception:
-        st.warning("⚠️ Unavailable")
+render_system_status()
 
 st.divider()
 
@@ -210,10 +191,4 @@ An AI-powered academic research analytics platform.
 - 🔐 [Admin Panel](/Admin) (administrators only)
 """)
 
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.85rem;'>"
-    "Powered by <a href='https://www.linkedin.com/in/fahad-al-jubalie-55973926/' target='_blank'>Fahad Al-Jubalie</a>"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer()

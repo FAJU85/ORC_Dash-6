@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import sanitize_string, validate_email, log_audit, RateLimiter
 from utils.email_service import send_bug_report_notification, create_github_issue
+from utils.ui import apply_theme, render_footer
 
-st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="centered")
+st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="wide")
+apply_theme()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -172,10 +174,4 @@ else:
     - Include any error messages you saw
     """)
 
-# Footer
-st.divider()
-st.markdown("""
-<div style="text-align: center; color: #64748b; font-size: 0.8rem;">
-    Your feedback helps us improve the dashboard for everyone
-</div>
-""", unsafe_allow_html=True)
+render_footer(note="Your feedback helps us improve the dashboard for everyone.")

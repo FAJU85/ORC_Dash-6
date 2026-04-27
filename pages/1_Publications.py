@@ -16,8 +16,10 @@ from utils.security import (
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex
+from utils.ui import apply_theme, render_footer, render_empty_state
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
+apply_theme()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -94,7 +96,10 @@ if error:
     st.stop()
 
 if not pubs:
-    st.info("📭 No publications in database. Click **Sync Now** to fetch from OpenAlex.")
+    render_empty_state(
+        "No publications yet",
+        "Use the Sync section above to pull publications from OpenAlex.",
+    )
     st.stop()
 
 # ── Researcher Filter ───────────────────────────────────────────────────────
@@ -228,12 +233,14 @@ for pub in page_items:
     col1, col2 = st.columns([5, 1])
 
     with col1:
-        st.markdown(f"### {title}")
+        st.markdown(f"**{title}**")
         if authors:
             auth_str = ", ".join(str(a) for a in authors[:3] if a)
             if len(authors) > 3:
-                auth_str += f" +{len(authors) - 3} more"
-            st.markdown(f"👥 {auth_str}")
+                with st.expander(f"👥 {auth_str} +{len(authors) - 3} more"):
+                    st.write(", ".join(str(a) for a in authors if a))
+            else:
+                st.markdown(f"👥 {auth_str}")
         oa_badge = " • 🔓 OA" if is_oa else ""
         st.markdown(f"📰 **{journal}** • {year} • 📈 {citations} citations{oa_badge}")
 
@@ -253,22 +260,22 @@ for pub in page_items:
                 "abstract": abstract,
             }
             log_audit("paper_selected", title[:50])
-            st.success("✅ Selected! Go to AI Assistant →")
+            st.switch_page("pages/2_AI_Assistant.py")
 
         if doi:
             st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
 
-    st.divider()
+    st.markdown("<div class='pub-card-wrap'></div>", unsafe_allow_html=True)
 
 # ── Pagination Controls ─────────────────────────────────────────────────────
 if total_pages > 1:
     c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
     with c1:
-        if st.button("⏮️", disabled=st.session_state.current_page == 1):
+        if st.button("⏮ First", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page = 1
             st.rerun()
     with c2:
-        if st.button("◀️", disabled=st.session_state.current_page == 1):
+        if st.button("◀ Prev", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page -= 1
             st.rerun()
     with c3:
@@ -277,13 +284,15 @@ if total_pages > 1:
             unsafe_allow_html=True,
         )
     with c4:
-        if st.button("▶️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Next ▶", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page += 1
             st.rerun()
     with c5:
-        if st.button("⏭️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Last ⏭", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page = total_pages
             st.rerun()
+
+render_footer()
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 if st.session_state.get("selected_paper"):

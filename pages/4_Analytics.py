@@ -13,8 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import execute_query
 from utils.hf_data import get_active_researchers, load_publications
+from utils.ui import apply_theme, get_chart_theme, render_footer, render_empty_state
 
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
+apply_theme()
 
 st.title("📈 Analytics")
 
@@ -39,7 +41,12 @@ else:
     pubs = pubs or []
 
 if not pubs:
-    st.info("📭 No data available. Sync publications from the **Publications** page first.")
+    render_empty_state(
+        "No publications to visualise",
+        "Sync publications first to see charts and analytics.",
+        cta_label="Go to Publications →",
+        cta_page="pages/1_Publications.py",
+    )
     st.stop()
 
 df = pd.DataFrame(pubs)
@@ -87,8 +94,7 @@ with col1:
         fig = px.bar(year_counts, x='publication_year', y='count',
                      labels={'publication_year': 'Year', 'count': 'Publications'},
                      color_discrete_sequence=['#06b6d4'])
-        fig.update_layout(showlegend=False, plot_bgcolor='rgba(0,0,0,0)',
-                          paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+        fig.update_layout(showlegend=False, **get_chart_theme())
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
@@ -100,8 +106,7 @@ with col2:
                       labels={'publication_year': 'Year', 'citation_count': 'Citations'},
                       markers=True)
         fig.update_traces(line_color='#8b5cf6')
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',
-                          paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+        fig.update_layout(**get_chart_theme())
         st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -115,8 +120,7 @@ if 'citation_count' in df.columns:
                  labels={'title_short': '', 'citation_count': 'Citations'},
                  color_discrete_sequence=['#22c55e'])
     fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400,
-                      plot_bgcolor='rgba(0,0,0,0)',
-                      paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+                      **get_chart_theme())
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -131,8 +135,7 @@ with col1:
         jcounts.columns = ['journal', 'count']
         fig = px.pie(jcounts, values='count', names='journal',
                      color_discrete_sequence=px.colors.qualitative.Set3)
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',
-                          paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+        fig.update_layout(**get_chart_theme())
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
@@ -143,8 +146,7 @@ with col2:
         fig = px.pie(values=[oa, closed],
                      names=['Open Access', 'Subscription'],
                      color_discrete_sequence=['#22c55e', '#64748b'])
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',
-                          paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+        fig.update_layout(**get_chart_theme())
         st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -155,6 +157,7 @@ if 'citation_count' in df.columns:
     fig = px.histogram(df, x='citation_count', nbins=20,
                        labels={'citation_count': 'Citations', 'count': 'Papers'},
                        color_discrete_sequence=['#f59e0b'])
-    fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',
-                      paper_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+    fig.update_layout(**get_chart_theme())
     st.plotly_chart(fig, use_container_width=True)
+
+render_footer()

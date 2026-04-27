@@ -9,8 +9,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import get_secret, sanitize_string, log_audit, RateLimiter
+from utils.ui import apply_theme, render_footer
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
+apply_theme()
 
 rate_limiter = RateLimiter()
 
@@ -102,7 +104,6 @@ if not api_key:
     st.info("Contact administrator to enable AI features.")
     st.stop()
 
-st.success("✅ AI Service Ready")
 st.divider()
 
 # ── Selected Paper ──────────────────────────────────────────────────────────
@@ -148,7 +149,17 @@ with col4:
 st.divider()
 
 # ── Chat Interface ──────────────────────────────────────────────────────────
-st.header("💬 Chat")
+chat_header_col, clear_col = st.columns([5, 1])
+with chat_header_col:
+    st.header("💬 Chat")
+with clear_col:
+    st.write("")
+    st.write("")
+    if st.session_state.chat_history:
+        if st.button("🗑️ Clear", use_container_width=True, help="Clear chat history"):
+            st.session_state.chat_history = []
+            log_audit("chat_cleared")
+            st.rerun()
 
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
@@ -191,16 +202,4 @@ if user_input:
             st.session_state.chat_history.append({"role": "assistant", "content": f"⚠️ {error}"})
     st.rerun()
 
-if st.session_state.chat_history:
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.chat_history = []
-        log_audit("chat_cleared")
-        st.rerun()
-
-st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "Select a paper from Publications for detailed analysis"
-    "</div>",
-    unsafe_allow_html=True,
-)
+render_footer(note="Select a paper from Publications for context-aware analysis.")

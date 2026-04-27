@@ -5,7 +5,6 @@ Powered by Hugging Face Datasets
 """
 
 import streamlit as st
-import requests
 import sys
 import os
 
@@ -13,11 +12,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.security import (
-    get_secret, get_nested_secret, execute_query,
-    is_db_configured, init_session, log_audit
+    get_nested_secret, execute_query, init_session, log_audit
 )
 from utils.hf_data import load_publications, get_active_researchers
-from utils.ui import apply_theme, theme_toggle_button
+from utils.ui import apply_theme, theme_toggle_button, render_system_status
 
 # Page configuration - use sidebar for proper page navigation
 st.set_page_config(
@@ -59,35 +57,7 @@ st.divider()
 # ============================================
 
 st.header("🔌 System Status")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.subheader("Database")
-    if is_db_configured():
-        st.success("✅ HF Connected")
-    else:
-        st.warning("⚠️ HF Not configured")
-
-with col2:
-    st.subheader("AI Service")
-    ai_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
-    if ai_key and len(ai_key) > 5:
-        st.success("✅ Ready")
-    else:
-        st.warning("⚠️ Not configured")
-
-
-with col3:
-    st.subheader("OpenAlex")
-    try:
-        r = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
-        if r.status_code == 200:
-            st.success("✅ Online")
-        else:
-            st.warning("⚠️ Unavailable")
-    except:
-        st.warning("⚠️ Unavailable")
+render_system_status()
 
 st.divider()
 

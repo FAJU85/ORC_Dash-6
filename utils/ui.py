@@ -1,9 +1,11 @@
 """
-Shared UI utilities: theme injection, chart theming, and theme toggle button.
+Shared UI utilities: theme injection, chart theming, theme toggle button,
+and system status panel.
 Call apply_theme() on every page immediately after st.set_page_config().
 """
 
 import streamlit as st
+import requests
 
 # ---------------------------------------------------------------------------
 # CSS blocks
@@ -113,3 +115,64 @@ def get_chart_theme() -> dict:
         "paper_bgcolor": "rgba(0,0,0,0)",
         "plot_bgcolor": "rgba(0,0,0,0)",
     }
+
+
+@st.cache_data(ttl=300)
+def _check_openalex() -> bool:
+    """Cached OpenAlex connectivity check — fires at most once every 5 minutes."""
+    try:
+        r = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def render_system_status(show_email: bool = False, show_telegram: bool = False) -> None:
+    """Render the Database / AI / OpenAlex status cards.
+
+    Args:
+        show_email: also show the SMTP email status column (Admin page).
+        show_telegram: also show the Telegram status column (Admin page).
+    """
+    from utils.security import is_db_configured, get_secret, get_nested_secret
+
+    num_cols = 3 + int(show_email) + int(show_telegram)
+    cols = st.columns(num_cols)
+
+    with cols[0]:
+        st.subheader("Database")
+        if is_db_configured():
+            st.success("✅ HF Connected")
+        else:
+            st.warning("⚠️ Not configured")
+
+    with cols[1]:
+        st.subheader("AI Service")
+        ai_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+        if ai_key and len(ai_key) > 5:
+            st.success("✅ Ready")
+        else:
+            st.warning("⚠️ Not configured")
+
+    with cols[2]:
+        st.subheader("OpenAlex")
+        if _check_openalex():
+            st.success("✅ Online")
+        else:
+            st.warning("⚠️ Unavailable")
+
+    if show_email:
+        with cols[3]:
+            st.subheader("Email (SMTP)")
+            if get_nested_secret("smtp", "user"):
+                st.success("✅ Configured")
+            else:
+                st.warning("⚠️ Demo mode")
+
+    if show_telegram:
+        with cols[4]:
+            st.subheader("Notifications")
+            if get_nested_secret("telegram", "bot_token"):
+                st.success("✅ Configured")
+            else:
+                st.info("ℹ️ Optional")

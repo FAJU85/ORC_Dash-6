@@ -104,7 +104,6 @@ if not api_key:
     st.info("Contact administrator to enable AI features.")
     st.stop()
 
-st.success("✅ AI Service Ready")
 st.divider()
 
 # ── Selected Paper ──────────────────────────────────────────────────────────

@@ -23,7 +23,7 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log
 )
-from utils.ui import apply_theme
+from utils.ui import apply_theme, render_system_status
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
 apply_theme()
@@ -220,31 +220,7 @@ else:
     with tab1:
         st.header("System Overview")
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.subheader("Database")
-            if is_db_configured():
-                st.success("✅ Connected")
-            else:
-                st.error("❌ Not configured")
-        with c2:
-            st.subheader("AI Service")
-            if get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Not set")
-        with c3:
-            st.subheader("Email (SMTP)")
-            if get_nested_secret("smtp", "user"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Demo mode")
-        with c4:
-            st.subheader("Notifications")
-            if get_nested_secret("telegram", "bot_token"):
-                st.success("✅ Configured")
-            else:
-                st.info("ℹ️ Optional")
+        render_system_status(show_email=True, show_telegram=True)
 
         st.divider()
         st.header("📊 Statistics")
@@ -295,6 +271,20 @@ else:
 
         researchers = get_active_researchers()
         if researchers:
+            # Header row
+            hc1, hc2, hc3, hc4, hc5 = st.columns([3, 2, 1, 1, 1])
+            with hc1:
+                st.caption("**Researcher**")
+            with hc2:
+                st.caption("**Institution**")
+            with hc3:
+                st.caption("**Pubs**")
+            with hc4:
+                st.caption("**Sync**")
+            with hc5:
+                st.caption("**Remove**")
+            st.divider()
+
             for r in researchers:
                 with st.container():
                     c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1])

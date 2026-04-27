@@ -8,11 +8,10 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import get_secret, get_nested_secret, is_db_configured
+from utils.security import get_nested_secret
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-from utils.ui import apply_theme
-import requests
+from utils.ui import apply_theme, render_system_status
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
 apply_theme()
@@ -167,29 +166,7 @@ st.divider()
 # ── Connection Status ───────────────────────────────────────────────────────
 st.header("🔌 Connection Status")
 
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.subheader("Database")
-    if is_db_configured():
-        st.success("✅ Connected")
-    else:
-        st.error("❌ Not configured")
-with c2:
-    st.subheader("AI Service")
-    if get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"):
-        st.success("✅ Available")
-    else:
-        st.warning("⚠️ Not available")
-with c3:
-    st.subheader("OpenAlex")
-    try:
-        r = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
-        if r.status_code == 200:
-            st.success("✅ Online")
-        else:
-            st.warning("⚠️ Unavailable")
-    except Exception:
-        st.warning("⚠️ Unavailable")
+render_system_status()
 
 st.divider()
 

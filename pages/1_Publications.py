@@ -230,7 +230,7 @@ for pub in page_items:
     col1, col2 = st.columns([5, 1])
 
     with col1:
-        st.markdown(f"### {title}")
+        st.markdown(f"**{title}**")
         if authors:
             auth_str = ", ".join(str(a) for a in authors[:3] if a)
             if len(authors) > 3:
@@ -255,7 +255,7 @@ for pub in page_items:
                 "abstract": abstract,
             }
             log_audit("paper_selected", title[:50])
-            st.success("✅ Selected! Go to AI Assistant →")
+            st.switch_page("pages/2_AI_Assistant.py")
 
         if doi:
             st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
@@ -266,11 +266,11 @@ for pub in page_items:
 if total_pages > 1:
     c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
     with c1:
-        if st.button("⏮️", disabled=st.session_state.current_page == 1):
+        if st.button("⏮ First", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page = 1
             st.rerun()
     with c2:
-        if st.button("◀️", disabled=st.session_state.current_page == 1):
+        if st.button("◀ Prev", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page -= 1
             st.rerun()
     with c3:
@@ -279,11 +279,11 @@ if total_pages > 1:
             unsafe_allow_html=True,
         )
     with c4:
-        if st.button("▶️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Next ▶", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page += 1
             st.rerun()
     with c5:
-        if st.button("⏭️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Last ⏭", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page = total_pages
             st.rerun()
 

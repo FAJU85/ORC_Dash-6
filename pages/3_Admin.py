@@ -86,11 +86,12 @@ if not admin_email or not admin_hash:
 
 if not st.session_state.admin_authenticated:
 
+    client_key = "admin_login"
+
     if not st.session_state.otp_sent:
         # ── Step 1: Email + Password ─────────────────────────────────────
         st.header("🔑 Administrator Login")
 
-        client_key = "admin_login"
         allowed, wait_time = rate_limiter.is_allowed(client_key, max_attempts=5, window_seconds=300)
         if not allowed:
             st.error(f"⚠️ Too many login attempts. Please wait {wait_time} seconds.")
@@ -319,7 +320,10 @@ else:
         st.header("System Settings")
 
         st.subheader("AI Configuration")
-        ai_configured = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API"))
+        ai_configured = bool(
+            get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+            or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
+        )
         if ai_configured:
             st.success("✅ AI assistant is configured and ready.")
         else:
@@ -351,7 +355,7 @@ else:
 
         col_load, _ = st.columns([1, 3])
         with col_load:
-            if st.button("🔄 Load from Storage"):
+            if st.button("🔄 Load from Storage", key="load_audit"):
                 load_audit_log_from_hf()
                 st.success("Loaded!")
 
@@ -397,7 +401,7 @@ else:
 
         action_col1, action_col2, _ = st.columns([1, 1, 3])
         with action_col1:
-            if st.button("🔄 Load from Storage"):
+            if st.button("🔄 Load from Storage", key="load_errors"):
                 load_error_log_from_hf()
                 st.success("Loaded!")
         with action_col2:

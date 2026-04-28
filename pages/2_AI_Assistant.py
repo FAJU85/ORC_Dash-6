@@ -30,7 +30,7 @@ def get_ai_response(message, paper=None):
 
     rate_limiter.record_attempt(f"ai_{session_id}")
 
-    api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API")
+    api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
     if not api_key:
         return None, "AI service not configured"
 
@@ -100,7 +100,7 @@ if "chat_history" not in st.session_state:
 
 st.title("🔬 AI Research Assistant")
 
-api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
 if not api_key:
     st.error("❌ AI service not configured")
     st.info("Contact administrator to enable AI features.")

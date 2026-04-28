@@ -135,7 +135,7 @@ if not st.session_state.admin_authenticated:
                 st.rerun()
 
         st.divider()
-        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")
+        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email or Telegram")
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────

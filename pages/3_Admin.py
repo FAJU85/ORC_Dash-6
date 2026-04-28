@@ -62,24 +62,22 @@ if admin_password and not admin_hash:
     admin_hash = hash_password(admin_password)
 
 if not admin_email or not admin_hash:
-    st.warning("⚠️ Administrator account not configured")
-    st.markdown("""
-    ### Setup required — add the following to your secrets:
+    st.error("⚠️ Administrator account not configured")
 
-    | Secret | Value |
-    |--------|-------|
-    | `ADMIN_EMAIL` | your@email.com |
-    | `ADMIN_PASSWORD` | your_password |
+    email_ok = bool(admin_email)
+    pass_ok  = bool(admin_hash)
 
-    **Or use a pre-hashed password (recommended):**
+    st.markdown("#### Secret status")
+    st.markdown(
+        f"{'✅' if email_ok else '❌'} `ADMIN_EMAIL` — {'set' if email_ok else '**missing**'}\n\n"
+        f"{'✅' if pass_ok else '❌'} `ADMIN_PASSWORD` — {'set' if pass_ok else '**missing**'}"
+    )
 
-    | Secret | Value |
-    |--------|-------|
-    | `ADMIN_EMAIL` | your@email.com |
-    | `admin.password_hash` | bcrypt or SHA-256 hash |
-
-    See `SECRETS_TEMPLATE.toml` for full instructions.
-    """)
+    st.info(
+        "Add both secrets at:\n\n"
+        "**https://huggingface.co/spaces/vooom/orc_dash_1/settings**\n\n"
+        "Then restart the Space (Settings → Factory reboot)."
+    )
     st.stop()
 
 # ============================================
@@ -124,19 +122,15 @@ if not st.session_state.admin_authenticated:
                     st.session_state.login_email = email
 
                     success, error = send_otp_email(email, otp)
+                    st.session_state.otp_sent = True
                     if success:
-                        st.session_state.otp_sent = True
                         st.session_state.smtp_not_configured = False
                         log_audit("otp_sent", email[:20])
-                        st.rerun()
-                    elif error == "SMTP_NOT_CONFIGURED":
-                        st.session_state.otp_sent = True
-                        st.session_state.smtp_not_configured = True
-                        log_audit("otp_demo_mode", email[:20])
-                        st.rerun()
                     else:
-                        st.error("❌ Could not send verification code")
-                        log_audit("otp_send_failed", error)
+                        # Fall back to demo mode for any SMTP issue
+                        st.session_state.smtp_not_configured = True
+                        log_audit("otp_demo_mode", f"{email[:20]} reason={error}")
+                    st.rerun()
 
         st.divider()
         st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")

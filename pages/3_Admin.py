@@ -53,7 +53,7 @@ for key, default in [
 st.title("🔐 Administrator Panel")
 
 # Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
-admin_email    = get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email", "")
+admin_email    = (get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email",    "")).lower().strip()
 admin_password = get_secret("ADMIN_PASSWORD") or get_nested_secret("admin", "password", "")
 admin_hash     = get_nested_secret("admin", "password_hash", "")
 

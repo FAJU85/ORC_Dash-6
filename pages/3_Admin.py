@@ -252,13 +252,24 @@ else:
 
         if st.button("Add Researcher", type="primary"):
             if new_orcid:
-                ok, err = add_researcher(orcid=new_orcid, name=new_name, institution=new_inst)
-                if ok:
-                    st.success(f"✅ Added: {new_name or new_orcid}")
-                    log_audit("researcher_added", new_orcid)
-                    st.rerun()
+                # Normalize: strip full URL prefix if pasted
+                orcid_clean = new_orcid.strip()
+                for prefix in ("https://orcid.org/", "http://orcid.org/"):
+                    if orcid_clean.startswith(prefix):
+                        orcid_clean = orcid_clean[len(prefix):]
+
+                if not validate_orcid(orcid_clean):
+                    st.error("❌ Invalid ORCID format — expected: 0000-0000-0000-0000")
                 else:
-                    st.error(f"❌ {err}")
+                    ok, err = add_researcher(orcid=orcid_clean, name=new_name, institution=new_inst)
+                    if ok:
+                        st.success(f"✅ Added: {new_name or orcid_clean}")
+                        log_audit("researcher_added", orcid_clean)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {err}")
+                        if "HF_REPO_ID" in (err or ""):
+                            st.info("Add **HF_TOKEN** and **HF_REPO_ID** to your Space secrets to enable data storage.")
             else:
                 st.warning("Please enter an ORCID")
 

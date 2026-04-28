@@ -57,16 +57,16 @@ def _send_otp_via_telegram(otp_code: str):
         return False, "TELEGRAM_NOT_CONFIGURED"
 
     text = (
-        f"🔐 *ORC Dashboard – Login Code*\n\n"
+        f"🔐 ORC Dashboard – Login Code\n\n"
         f"Your verification code is:\n\n"
-        f"`{otp_code}`\n\n"
+        f"{otp_code}\n\n"
         f"This code expires in 5 minutes."
     )
     try:
         resp = requests.post(
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
-            timeout=10,
+            json={"chat_id": chat_id, "text": text},
+            timeout=30,
         )
         if resp.status_code == 200:
             log_audit("otp_telegram_sent")

@@ -218,17 +218,20 @@ def sync_from_openalex(orcid, force=False):
     """
     import requests
 
+    # Normalize ORCID — strip full URL prefix if user pasted it
+    orcid = orcid.strip()
+    if orcid.startswith("https://orcid.org/"):
+        orcid = orcid[len("https://orcid.org/"):]
+    if orcid.startswith("http://orcid.org/"):
+        orcid = orcid[len("http://orcid.org/"):]
+
     try:
-        # --- Cache check ---
+        # --- Cache check (only use cache when it has results) ---
+        works = None
         if not force:
             cached = get_cached_works(orcid)
-            if cached is not None:
-                # Still need to merge into stored publications
+            if cached:           # ignore cached empty lists
                 works = cached
-            else:
-                works = None
-        else:
-            works = None
 
         if works is None:
             url = (
@@ -263,7 +266,8 @@ def sync_from_openalex(orcid, force=False):
                 return 0, "Could not fetch from OpenAlex after retries"
 
             works = resp.json().get("results", [])
-            set_cached_works(orcid, works, ttl=3600)
+            if works:            # only cache non-empty results
+                set_cached_works(orcid, works, ttl=3600)
 
         if not works:
             return 0, "No publications found for this ORCID"

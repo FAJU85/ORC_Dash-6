@@ -1,7 +1,6 @@
 """
 ORC Research Dashboard - Main Application
 Secure, production-ready academic analytics platform
-Powered by Hugging Face Datasets
 """
 
 import streamlit as st
@@ -106,7 +105,7 @@ if metrics and len(metrics) > 0:
 else:
     render_empty_state(
         "No publications yet",
-        "Sync your ORCID to pull publications from OpenAlex.",
+        "Sync your ORCID to import your publications.",
         cta_label="Go to Publications →",
         cta_page="pages/1_Publications.py",
     )
@@ -143,7 +142,7 @@ if pubs and len(pubs) > 0:
 else:
     render_empty_state(
         "No recent publications",
-        "Sync your ORCID to pull publications from OpenAlex.",
+        "Sync your ORCID to import your publications.",
         cta_label="Go to Publications →",
         cta_page="pages/1_Publications.py",
     )

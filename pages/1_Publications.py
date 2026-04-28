@@ -64,7 +64,7 @@ if "current_page" not in st.session_state:
 st.title("📚 Publications")
 
 # ── Sync Section ────────────────────────────────────────────────────────────
-st.header("🔄 Sync from OpenAlex")
+st.header("🔄 Sync Publications")
 
 if can_sync_publications():
     col1, col2 = st.columns([3, 1])
@@ -98,7 +98,7 @@ if error:
 if not pubs:
     render_empty_state(
         "No publications yet",
-        "Use the Sync section above to pull publications from OpenAlex.",
+        "Use the Sync section above to import your publications.",
     )
     st.stop()
 

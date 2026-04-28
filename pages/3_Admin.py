@@ -322,8 +322,11 @@ else:
         st.header("System Settings")
 
         st.subheader("AI Configuration")
-        current_model = get_secret("AI_MODEL") or "llama-3.3-70b-versatile"
-        st.info(f"**Active model:** `{current_model}`  \nSet the `AI_MODEL` key in your environment or secrets to change it.")
+        ai_configured = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"))
+        if ai_configured:
+            st.success("✅ AI assistant is configured and ready.")
+        else:
+            st.warning("⚠️ AI service key not set. Update your environment secrets to enable it.")
 
         st.divider()
         st.subheader("Cache Management")

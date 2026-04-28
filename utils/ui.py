@@ -129,11 +129,11 @@ def _check_openalex() -> bool:
 
 
 def render_system_status(show_email: bool = False, show_telegram: bool = False) -> None:
-    """Render the Database / AI / OpenAlex status cards.
+    """Render service status cards — no vendor names exposed in the UI.
 
     Args:
-        show_email: also show the SMTP email status column (Admin page).
-        show_telegram: also show the Telegram status column (Admin page).
+        show_email: also show the email service status column (Admin page).
+        show_telegram: also show the notifications status column (Admin page).
     """
     from utils.security import is_db_configured, get_secret, get_nested_secret
 
@@ -143,7 +143,7 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
     with cols[0]:
         st.subheader("Database")
         if is_db_configured():
-            st.success("✅ HF Connected")
+            st.success("✅ Connected")
         else:
             st.warning("⚠️ Not configured")
 
@@ -156,7 +156,7 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
             st.warning("⚠️ Not configured")
 
     with cols[2]:
-        st.subheader("OpenAlex")
+        st.subheader("Data Source")
         if _check_openalex():
             st.success("✅ Online")
         else:
@@ -164,7 +164,7 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
 
     if show_email:
         with cols[3]:
-            st.subheader("Email (SMTP)")
+            st.subheader("Email Service")
             if get_nested_secret("smtp", "user"):
                 st.success("✅ Configured")
             else:
@@ -217,10 +217,13 @@ def render_footer(note: str = "") -> None:
         st.caption(note)
     st.divider()
     st.markdown(
-        "<div style='text-align:center;font-size:0.85rem;'>"
-        "<span class='text-muted'>ORC Research Dashboard v1.0 · Powered by "
+        "<div style='text-align:center;font-size:0.85rem;line-height:1.8;'>"
+        "<span class='text-muted'>Powered by "
         "<a href='https://www.linkedin.com/in/fahad-al-jubalie-55973926/' "
         "target='_blank' style='color:#06b6d4;text-decoration:none;'>Fahad Al-Jubalie</a>"
+        "<br>All rights reserved to the "
+        "<a href='https://obesitycenter.ksu.edu.sa/ar' "
+        "target='_blank' style='color:#06b6d4;text-decoration:none;'>Obesity Research Center (ORC)</a>"
         "</span></div>",
         unsafe_allow_html=True,
     )

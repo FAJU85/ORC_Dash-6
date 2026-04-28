@@ -23,6 +23,9 @@ _rate_limit_store: dict = {}   # key -> {attempts: [...], blocked_until: float}
 _audit_lock = threading.Lock()
 _audit_log: list = []           # in-memory audit log (all sessions)
 
+_error_lock = threading.Lock()
+_error_log: list = []           # in-memory error log (all sessions)
+
 # ============================================
 # SECURE SECRET ACCESS
 # ============================================
@@ -213,6 +216,61 @@ def load_audit_log_from_hf():
         pass
 
 # ============================================
+# ERROR LOGGING (module-level, shared across sessions)
+# ============================================
+
+def log_error(error_type: str, message: str, page: str = "") -> None:
+    """Persist an application error to the in-memory log and HF storage."""
+    entry = {
+        'timestamp': datetime.now().isoformat(),
+        'error_type': sanitize_string(error_type, 100),
+        'message': sanitize_string(message, 500),
+        'page': sanitize_string(page, 100),
+    }
+    with _error_lock:
+        _error_log.append(entry)
+        if len(_error_log) > 500:
+            _error_log[:] = _error_log[-500:]
+
+    try:
+        from utils.hf_data import append_error_entry
+        append_error_entry(entry)
+    except Exception:
+        pass
+
+
+def get_error_log() -> list:
+    """Return the current in-memory error log."""
+    with _error_lock:
+        return list(_error_log)
+
+
+def clear_error_log() -> None:
+    """Clear the in-memory error log."""
+    global _error_log
+    with _error_lock:
+        _error_log.clear()
+
+
+def load_error_log_from_hf() -> None:
+    """Load persisted error log from HF Dataset into the module-level list."""
+    global _error_log
+    try:
+        from utils.hf_data import load_error_log as hf_load
+        entries = hf_load()
+        if entries:
+            with _error_lock:
+                existing_ts = {e['timestamp'] for e in _error_log}
+                for e in entries:
+                    if e.get('timestamp') not in existing_ts:
+                        _error_log.append(e)
+                _error_log.sort(key=lambda x: x.get('timestamp', ''))
+                _error_log[:] = _error_log[-500:]
+    except Exception:
+        pass
+
+
+# ============================================
 # DATABASE ACCESS (Hugging Face Datasets)
 # ============================================
 
@@ -230,6 +288,7 @@ def execute_query(sql, params=None):
         from utils.hf_data import execute_query as hf_execute_query
         return hf_execute_query(sql, params)
     except Exception as e:
+        log_error("db_query_error", str(e), page="execute_query")
         return None, str(e)
 
 # ============================================

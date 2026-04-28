@@ -8,7 +8,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import get_secret, sanitize_string, log_audit, RateLimiter
+from utils.security import get_secret, sanitize_string, log_audit, log_error, RateLimiter
 from utils.ui import apply_theme, render_footer
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
@@ -30,7 +30,7 @@ def get_ai_response(message, paper=None):
 
     rate_limiter.record_attempt(f"ai_{session_id}")
 
-    api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+    api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API")
     if not api_key:
         return None, "AI service not configured"
 
@@ -79,10 +79,12 @@ Base your responses on this paper's information."""
         log_audit("ai_request", "ok")
         return response.choices[0].message.content, None
 
-    except ImportError:
+    except ImportError as e:
+        log_error("ai_import_error", str(e), page="AI Assistant")
         return None, "AI library not available"
-    except Exception:
+    except Exception as e:
         log_audit("ai_error", "service_error")
+        log_error("ai_service_error", str(e), page="AI Assistant")
         return None, "AI service temporarily unavailable"
 
 # ============================================

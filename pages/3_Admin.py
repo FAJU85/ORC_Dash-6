@@ -14,6 +14,7 @@ from utils.security import (
     get_secret, get_nested_secret, hash_password, verify_password,
     generate_otp, validate_email, validate_otp, sanitize_string,
     log_audit, get_audit_log, load_audit_log_from_hf,
+    log_error, get_error_log, clear_error_log, load_error_log_from_hf,
     RateLimiter, is_admin_authenticated, admin_logout,
     execute_query, is_db_configured
 )
@@ -21,7 +22,7 @@ from utils.email_service import send_otp_email
 from utils.hf_data import (
     get_active_researchers, add_researcher, remove_researcher,
     load_publications, sync_from_openalex, load_researchers,
-    flush_audit_log
+    flush_audit_log, flush_error_log
 )
 from utils.ui import apply_theme, render_system_status, render_footer
 
@@ -212,7 +213,7 @@ else:
 
     st.divider()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "👥 Researchers", "⚙️ Settings", "📋 Audit Log"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Dashboard", "👥 Researchers", "⚙️ Settings", "📋 Audit Log", "🚨 Error Log"])
 
     # ── Tab 1: Dashboard ───────────────────────────────────────────────────
     with tab1:
@@ -322,7 +323,7 @@ else:
         st.header("System Settings")
 
         st.subheader("AI Configuration")
-        ai_configured = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"))
+        ai_configured = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API"))
         if ai_configured:
             st.success("✅ AI assistant is configured and ready.")
         else:
@@ -392,5 +393,57 @@ else:
                 )
         else:
             st.info("No audit events recorded yet.")
+
+    # ── Tab 5: Error Log ───────────────────────────────────────────────────
+    with tab5:
+        st.header("Application Error Log")
+        st.markdown("*Exceptions and failures captured across all pages*")
+
+        action_col1, action_col2, _ = st.columns([1, 1, 3])
+        with action_col1:
+            if st.button("🔄 Load from Storage"):
+                load_error_log_from_hf()
+                st.success("Loaded!")
+        with action_col2:
+            if st.button("🗑️ Clear Error Log"):
+                clear_error_log()
+                flush_error_log()
+                log_audit("error_log_cleared")
+                st.success("Cleared!")
+                st.rerun()
+
+        error_log = get_error_log()
+        if error_log:
+            st.caption(f"{len(error_log)} error(s) recorded")
+            _TYPE_COLOURS = {
+                "sync_error":       "#ef4444",
+                "ai_service_error": "#f97316",
+                "ai_import_error":  "#f97316",
+                "db_query_error":   "#a855f7",
+            }
+            for entry in reversed(error_log[-100:]):
+                ts         = entry.get('timestamp', '')[:19]
+                etype      = entry.get('error_type', 'error')
+                msg        = entry.get('message', '')
+                page       = entry.get('page', '')
+                color      = _TYPE_COLOURS.get(etype, "#ef4444")
+                page_badge = (
+                    f"<span style='background:{color}20;color:{color};"
+                    f"padding:0.1rem 0.4rem;border-radius:4px;font-size:0.75rem;"
+                    f"margin-left:0.5rem'>{page}</span>"
+                    if page else ""
+                )
+                st.markdown(
+                    f"<div style='padding:0.4rem 0;border-left:3px solid {color};"
+                    f"padding-left:0.6rem;margin-bottom:0.3rem'>"
+                    f"<span class='text-muted' style='font-size:0.8rem'>{ts}</span>"
+                    f"{page_badge} "
+                    f"<strong style='color:{color}'>{etype}</strong><br>"
+                    f"<span style='font-size:0.9rem'>{msg}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No errors recorded yet.")
 
 render_footer(note="🔒 Secure Admin Panel · All actions are logged")

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import (
     get_secret, get_nested_secret, execute_query,
-    sanitize_string, validate_orcid, log_audit, RateLimiter,
+    sanitize_string, validate_orcid, log_audit, log_error, RateLimiter,
     can_sync_publications, is_admin
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
@@ -43,6 +43,7 @@ def sync_publications(orcid):
     count, error = hf_sync(orcid)
     if error:
         log_audit("sync_error", error)
+        log_error("sync_error", error, page="Publications")
         return 0, error
 
     log_audit("sync_complete", f"Inserted: {count}")

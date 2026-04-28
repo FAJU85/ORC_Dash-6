@@ -236,13 +236,19 @@ def sync_from_openalex(orcid, force=False):
                 f"?filter=authorships.author.orcid:{orcid}"
                 f"&per-page=200&sort=publication_year:desc"
             )
+            # Add polite-pool email to User-Agent if configured
+            polite_email = os.environ.get("OPEN_ALEX", "")
+            user_agent = (
+                f"ORC-Dashboard/1.0 (mailto:{polite_email})" if polite_email
+                else "ORC-Dashboard/1.0"
+            )
             # Retry with backoff
             resp = None
             for attempt in range(3):
                 try:
                     resp = requests.get(
                         url,
-                        headers={"User-Agent": "ORC-Dashboard/1.0"},
+                        headers={"User-Agent": user_agent},
                         timeout=30,
                     )
                     if resp.status_code == 200:
@@ -354,6 +360,51 @@ def load_audit_log():
     if err or not isinstance(data, list):
         return []
     return data
+
+# ============================================
+# ERROR LOG PERSISTENCE
+# ============================================
+
+_error_buffer: list = []
+_error_buffer_lock = threading.Lock()
+
+
+def append_error_entry(entry):
+    """Buffer an error entry; flush to HF when buffer reaches threshold."""
+    with _error_buffer_lock:
+        _error_buffer.append(entry)
+        should_flush = len(_error_buffer) >= 10
+    if should_flush:
+        flush_error_log()
+
+
+def flush_error_log():
+    """Flush buffered error entries to HF Dataset."""
+    with _error_buffer_lock:
+        if not _error_buffer:
+            return
+        pending = list(_error_buffer)
+        _error_buffer.clear()
+
+    if not is_hf_configured():
+        return
+
+    existing = load_error_log()
+    existing.extend(pending)
+    if len(existing) > 500:
+        existing = existing[-500:]
+    _hf_upload_json("error_log.json", existing, "Append error entries")
+
+
+def load_error_log():
+    """Load persisted error log from HF Dataset."""
+    if not is_hf_configured():
+        return []
+    data, err = _hf_download_json("error_log.json")
+    if err or not isinstance(data, list):
+        return []
+    return data
+
 
 # ============================================
 # COMPATIBILITY LAYER (SQL-style queries → HF Dataset)

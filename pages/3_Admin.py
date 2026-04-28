@@ -98,39 +98,41 @@ if not st.session_state.admin_authenticated:
             st.stop()
 
         with st.form("login_form"):
-            email    = st.text_input("Email", placeholder="admin@example.com")
-            password = st.text_input("Password", type="password")
+            email_input    = st.text_input("Email", placeholder="admin@example.com")
+            password_input = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Continue", type="primary", use_container_width=True)
 
-            if submitted:
-                rate_limiter.record_attempt(client_key)
-                email = sanitize_string(email, 100).lower().strip()
+        # ── Process outside the form so st.rerun() works reliably ──────────
+        if submitted:
+            rate_limiter.record_attempt(client_key)
+            email = sanitize_string(email_input, 100).lower().strip()
 
-                if not validate_email(email):
-                    st.error("❌ Invalid email format")
-                    log_audit("login_invalid_email", email[:20])
-                elif email != admin_email:
-                    st.error("❌ Invalid credentials")
-                    log_audit("login_wrong_email", email[:20])
-                elif not verify_password(password, admin_hash):
-                    st.error("❌ Invalid credentials")
-                    log_audit("login_wrong_password", email[:20])
-                else:
-                    otp = generate_otp()
-                    st.session_state.otp_code   = otp
-                    st.session_state.otp_expiry = datetime.now() + timedelta(minutes=5)
-                    st.session_state.login_email = email
+            if not validate_email(email):
+                st.error("❌ Invalid email format")
+                log_audit("login_invalid_email", email[:20])
+            elif email != admin_email:
+                st.error("❌ Invalid credentials")
+                log_audit("login_wrong_email", email[:20])
+            elif not verify_password(password_input, admin_hash):
+                st.error("❌ Invalid credentials")
+                log_audit("login_wrong_password", email[:20])
+            else:
+                otp = generate_otp()
+                st.session_state.otp_code    = otp
+                st.session_state.otp_expiry  = datetime.now() + timedelta(minutes=5)
+                st.session_state.login_email = email
 
+                with st.spinner("Sending verification code…"):
                     success, error = send_otp_email(email, otp)
-                    st.session_state.otp_sent = True
-                    if success:
-                        st.session_state.smtp_not_configured = False
-                        log_audit("otp_sent", email[:20])
-                    else:
-                        # Fall back to demo mode for any SMTP issue
-                        st.session_state.smtp_not_configured = True
-                        log_audit("otp_demo_mode", f"{email[:20]} reason={error}")
-                    st.rerun()
+
+                st.session_state.otp_sent = True
+                if success:
+                    st.session_state.smtp_not_configured = False
+                    log_audit("otp_sent", email[:20])
+                else:
+                    st.session_state.smtp_not_configured = True
+                    log_audit("otp_demo_mode", f"{email[:20]} reason={error}")
+                st.rerun()
 
         st.divider()
         st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")

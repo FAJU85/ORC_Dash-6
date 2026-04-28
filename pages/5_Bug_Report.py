@@ -85,7 +85,7 @@ else:
         expected_actual = st.text_area(
             "Expected vs Actual",
             placeholder="Expected: ...\nActual: ...",
-            height=60,
+            height=100,
             help="What did you expect vs what happened?"
         )
         

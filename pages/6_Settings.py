@@ -180,7 +180,7 @@ st.markdown("""
 An AI-powered academic research analytics platform.
 
 **Features:**
-- 📚 Publication tracking via OpenAlex
+- 📚 Publication tracking and management
 - 🔬 AI-powered research assistant
 - 📊 Interactive analytics & visualizations
 - 📥 Export to CSV, BibTeX, JSON

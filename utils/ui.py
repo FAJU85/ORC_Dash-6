@@ -149,7 +149,7 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
 
     with cols[1]:
         st.subheader("AI Service")
-        ai_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+        ai_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API")
         if ai_key and len(ai_key) > 5:
             st.success("✅ Ready")
         else:

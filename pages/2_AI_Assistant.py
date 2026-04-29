@@ -301,8 +301,6 @@ if st.session_state.pending_action and paper:
         st.warning(f"⚠️ {error}")
     elif validated:
         render_structured(validated)
-        with st.expander("🔧 Raw JSON response"):
-            st.code(raw, language="json")
     elif raw:
         # Schema validation failed — show raw text as fallback
         st.info(raw)

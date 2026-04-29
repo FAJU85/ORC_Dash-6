@@ -41,7 +41,7 @@ for key, default in [
     ("otp_code", None),
     ("otp_expiry", None),
     ("login_email", None),
-    ("smtp_not_configured", False),
+    ("otp_via_telegram", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -118,22 +118,29 @@ if not st.session_state.admin_authenticated:
                 st.error("❌ Invalid credentials")
                 log_audit("login_wrong_password", email[:20])
             else:
+                import threading
                 otp = generate_otp()
                 st.session_state.otp_code    = otp
                 st.session_state.otp_expiry  = datetime.now() + timedelta(minutes=5)
                 st.session_state.login_email = email
-                st.session_state.otp_sent    = True
 
-                # Send via Telegram in background — don't block login
-                import threading
+                # Try Telegram first; wait up to 10 s before falling back
+                tg_result = {"ok": False}
                 def _tg_send():
-                    try:
-                        send_otp_email(email, otp)
-                    except Exception:
-                        pass
-                threading.Thread(target=_tg_send, daemon=True).start()
+                    ok, _ = send_otp_email(email, otp)
+                    tg_result["ok"] = ok
 
-                log_audit("otp_generated", email[:20])
+                t = threading.Thread(target=_tg_send, daemon=True)
+                t.start()
+                with st.spinner("Sending verification code to Telegram…"):
+                    t.join(timeout=10)
+
+                st.session_state.otp_sent               = True
+                st.session_state.otp_via_telegram        = tg_result["ok"]
+                if tg_result["ok"]:
+                    log_audit("otp_telegram_sent", email[:20])
+                else:
+                    log_audit("otp_fallback_screen", email[:20])
                 st.rerun()
 
         st.divider()
@@ -142,8 +149,11 @@ if not st.session_state.admin_authenticated:
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
         st.header("📱 Enter Verification Code")
-        st.info(f"🔐 Your verification code: **{st.session_state.otp_code}**")
-        st.caption("A copy has also been sent to your Telegram bot.")
+        if st.session_state.get("otp_via_telegram"):
+            st.success("✅ Verification code sent to your Telegram bot.")
+        else:
+            st.warning("⚠️ Could not reach Telegram. Use the code below:")
+            st.info(f"🔐 **{st.session_state.otp_code}**")
 
         otp_key = f"otp_{st.session_state.login_email}"
         allowed, wait_time = rate_limiter.is_allowed(otp_key, max_attempts=5, window_seconds=300)

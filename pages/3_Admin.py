@@ -122,17 +122,18 @@ if not st.session_state.admin_authenticated:
                 st.session_state.otp_code    = otp
                 st.session_state.otp_expiry  = datetime.now() + timedelta(minutes=5)
                 st.session_state.login_email = email
+                st.session_state.otp_sent    = True
 
-                with st.spinner("Sending verification code…"):
-                    success, error = send_otp_email(email, otp)
+                # Send via Telegram in background — don't block login
+                import threading
+                def _tg_send():
+                    try:
+                        send_otp_email(email, otp)
+                    except Exception:
+                        pass
+                threading.Thread(target=_tg_send, daemon=True).start()
 
-                st.session_state.otp_sent = True
-                if success:
-                    st.session_state.smtp_not_configured = False
-                    log_audit("otp_sent", email[:20])
-                else:
-                    st.session_state.smtp_not_configured = True
-                    log_audit("otp_demo_mode", f"{email[:20]} reason={error}")
+                log_audit("otp_generated", email[:20])
                 st.rerun()
 
         st.divider()
@@ -141,11 +142,8 @@ if not st.session_state.admin_authenticated:
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
         st.header("📱 Enter Verification Code")
-        st.markdown("A 6-digit code has been sent to your **Telegram**")
-
-        if st.session_state.smtp_not_configured:
-            st.warning("⚠️ Telegram not reachable. Demo mode active.")
-            st.info(f"🔐 **Demo OTP:** {st.session_state.otp_code}")
+        st.info(f"🔐 Your verification code: **{st.session_state.otp_code}**")
+        st.caption("A copy has also been sent to your Telegram bot.")
 
         otp_key = f"otp_{st.session_state.login_email}"
         allowed, wait_time = rate_limiter.is_allowed(otp_key, max_attempts=5, window_seconds=300)

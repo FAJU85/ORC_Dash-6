@@ -3,6 +3,9 @@ ORC Research Dashboard - Notification Utilities
 OTP delivery via Telegram and bug-report notifications.
 """
 
+import json
+import urllib.request
+import urllib.parse
 import requests
 from utils.security import get_nested_secret, log_audit
 
@@ -10,32 +13,42 @@ from utils.security import get_nested_secret, log_audit
 # ── OTP delivery ─────────────────────────────────────────────────────────────
 
 def _send_otp_via_telegram(otp_code: str):
-    """Send OTP via Telegram. Returns (success, error_str)."""
+    """Send OTP via Telegram using urllib (avoids requests SSL issues on some hosts)."""
     bot_token = get_nested_secret("telegram", "bot_token", "")
     chat_id   = get_nested_secret("telegram", "admin_chat_id", "")
 
     if not bot_token or not chat_id:
+        log_audit("otp_telegram_not_configured")
         return False, "TELEGRAM_NOT_CONFIGURED"
 
     text = (
-        f"🔐 ORC Dashboard – Login Code\n\n"
+        f"ORC Dashboard - Login Code\n\n"
         f"Your verification code is:\n\n"
         f"{otp_code}\n\n"
         f"This code expires in 5 minutes."
     )
+    url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+
     try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": chat_id, "text": text},
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            log_audit("otp_telegram_sent")
-            return True, None
-        return False, f"Telegram API {resp.status_code}"
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            result = json.loads(resp.read())
+            if result.get("ok"):
+                log_audit("otp_telegram_sent")
+                return True, None
+            err = result.get("description", "unknown")
+            log_audit("otp_telegram_api_error", err)
+            return False, f"Telegram: {err}"
     except Exception as e:
-        log_audit("otp_telegram_error", type(e).__name__)
-        return False, f"Telegram error: {type(e).__name__}"
+        log_audit("otp_telegram_error", f"{type(e).__name__}: {e}")
+        return False, f"{type(e).__name__}: {e}"
+
+
+def send_otp_email(recipient_email: str, otp_code: str):
+    """Deliver OTP via Telegram. Returns (success, error_or_None)."""
+    return _send_otp_via_telegram(otp_code)
 
 
 def send_otp_email(recipient_email: str, otp_code: str):

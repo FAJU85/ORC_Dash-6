@@ -349,6 +349,26 @@ else:
             st.warning("⚠️ AI service key not set. Update your environment secrets to enable it.")
 
         st.divider()
+        st.subheader("Telegram Notifications")
+        tg_token   = get_nested_secret("telegram", "bot_token", "")
+        tg_chat_id = get_nested_secret("telegram", "admin_chat_id", "")
+        col_tg1, col_tg2 = st.columns(2)
+        with col_tg1:
+            st.markdown(f"**Bot token:** {'✅ set' if tg_token else '❌ missing'}")
+            st.markdown(f"**Chat ID:** {'✅ set' if tg_chat_id else '❌ missing'}")
+        with col_tg2:
+            if st.button("📨 Send Test Message", key="test_telegram"):
+                if not tg_token or not tg_chat_id:
+                    st.error("Set TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID secrets first.")
+                else:
+                    from utils.email_service import _send_otp_via_telegram
+                    ok, err = _send_otp_via_telegram("TEST-123")
+                    if ok:
+                        st.success("✅ Test message delivered to Telegram!")
+                    else:
+                        st.error(f"❌ Failed: {err}")
+
+        st.divider()
         st.subheader("Cache Management")
         if st.button("🗑️ Clear Application Cache"):
             st.cache_data.clear()

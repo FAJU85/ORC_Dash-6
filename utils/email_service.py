@@ -1,19 +1,50 @@
 """
 ORC Research Dashboard - Notification Utilities
-OTP delivery via Telegram and bug-report notifications.
+OTP delivery via Telegram (through Cloudflare Worker relay) and bug-report notifications.
 """
 
 import json
 import urllib.request
 import urllib.parse
 import requests
-from utils.security import get_nested_secret, log_audit
+from utils.security import get_secret, get_nested_secret, log_audit
 
 
 # ── OTP delivery ─────────────────────────────────────────────────────────────
 
 def _send_otp_via_telegram(otp_code: str):
-    """Send OTP via Telegram using urllib (avoids requests SSL issues on some hosts)."""
+    """
+    Send OTP via Telegram.
+    Tries the Cloudflare Worker relay first (bypasses HF Spaces network block).
+    Falls back to direct Telegram API if no relay is configured.
+    """
+    relay_url    = get_secret("TELEGRAM_RELAY_URL")
+    relay_secret = get_secret("TELEGRAM_RELAY_SECRET")
+
+    # ── Path A: relay (recommended for HF Spaces) ────────────────────────
+    if relay_url:
+        try:
+            payload = json.dumps({
+                "otp": otp_code,
+                "secret": relay_secret or "",
+            }).encode()
+            req = urllib.request.Request(
+                relay_url, data=payload, method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read())
+                if result.get("ok"):
+                    log_audit("otp_telegram_sent", "via_relay")
+                    return True, None
+                err = result.get("description", str(result))
+                log_audit("otp_telegram_relay_error", err)
+                return False, f"Relay→Telegram: {err}"
+        except Exception as e:
+            log_audit("otp_telegram_relay_error", f"{type(e).__name__}: {e}")
+            return False, f"Relay error: {type(e).__name__}: {e}"
+
+    # ── Path B: direct API (works outside HF Spaces) ─────────────────────
     bot_token = get_nested_secret("telegram", "bot_token", "")
     chat_id   = get_nested_secret("telegram", "admin_chat_id", "")
 
@@ -23,20 +54,20 @@ def _send_otp_via_telegram(otp_code: str):
 
     text = (
         f"ORC Dashboard - Login Code\n\n"
-        f"Your verification code is:\n\n"
-        f"{otp_code}\n\n"
+        f"Your verification code is:\n\n{otp_code}\n\n"
         f"This code expires in 5 minutes."
     )
-    url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
-
     try:
-        req = urllib.request.Request(url, data=data, method="POST")
-        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            data=data, method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
         with urllib.request.urlopen(req, timeout=20) as resp:
             result = json.loads(resp.read())
             if result.get("ok"):
-                log_audit("otp_telegram_sent")
+                log_audit("otp_telegram_sent", "direct")
                 return True, None
             err = result.get("description", "unknown")
             log_audit("otp_telegram_api_error", err)
@@ -47,7 +78,7 @@ def _send_otp_via_telegram(otp_code: str):
 
 
 def send_otp_email(recipient_email: str, otp_code: str):
-    """Deliver OTP via Telegram. Returns (success, error_or_None)."""
+    """Deliver OTP via Telegram relay. Returns (success, error_or_None)."""
     return _send_otp_via_telegram(otp_code)
 
 

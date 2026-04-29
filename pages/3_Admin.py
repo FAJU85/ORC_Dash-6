@@ -350,14 +350,20 @@ else:
 
         st.divider()
         st.subheader("Telegram Notifications")
-        tg_token   = get_nested_secret("telegram", "bot_token", "")
+        relay_url = get_secret("TELEGRAM_RELAY_URL")
+        tg_token  = get_nested_secret("telegram", "bot_token", "")
         tg_chat_id = get_nested_secret("telegram", "admin_chat_id", "")
-        st.markdown(f"**Bot token:** {'✅ set' if tg_token else '❌ missing — add `TELEGRAM_BOT_TOKEN` secret'}")
-        st.markdown(f"**Chat ID:** {'✅ set' if tg_chat_id else '❌ missing — add `TELEGRAM_ADMIN_CHAT_ID` secret'}")
-        st.info(
-            "ℹ️ Outbound SSL connections to Telegram are blocked at the hosting network level. "
-            "The login code is shown on-screen as a secure fallback whenever Telegram delivery fails."
-        )
+
+        if relay_url:
+            st.success("✅ Cloudflare relay configured — Telegram OTP delivery active")
+        else:
+            st.warning(
+                "⚠️ Cloudflare relay not set up. "
+                "Set `TELEGRAM_RELAY_URL` and `TELEGRAM_RELAY_SECRET` secrets to enable Telegram OTP. "
+                "Direct Telegram API is blocked at the hosting network level."
+            )
+        st.markdown(f"**Bot token:** {'✅ set' if tg_token else '⚪ not set'}")
+        st.markdown(f"**Chat ID:** {'✅ set' if tg_chat_id else '⚪ not set'}")
 
         st.divider()
         st.subheader("Cache Management")

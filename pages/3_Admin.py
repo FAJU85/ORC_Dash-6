@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import (
     get_secret, get_nested_secret, hash_password, verify_password,
-    generate_otp, validate_email, validate_otp, sanitize_string,
+    generate_otp, validate_email, validate_otp, validate_orcid, sanitize_string,
     log_audit, get_audit_log, load_audit_log_from_hf,
     log_error, get_error_log, clear_error_log, load_error_log_from_hf,
     RateLimiter, is_admin_authenticated, admin_logout,

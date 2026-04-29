@@ -136,15 +136,15 @@ if not st.session_state.admin_authenticated:
                 st.rerun()
 
         st.divider()
-        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email or Telegram")
+        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your Telegram")
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
         st.header("📱 Enter Verification Code")
-        st.markdown(f"A 6-digit code has been sent to **{st.session_state.login_email[:3]}***")
+        st.markdown("A 6-digit code has been sent to your **Telegram**")
 
         if st.session_state.smtp_not_configured:
-            st.warning("⚠️ Email service not configured. Demo mode active.")
+            st.warning("⚠️ Telegram not reachable. Demo mode active.")
             st.info(f"🔐 **Demo OTP:** {st.session_state.otp_code}")
 
         otp_key = f"otp_{st.session_state.login_email}"

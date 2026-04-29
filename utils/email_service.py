@@ -1,55 +1,16 @@
 """
 ORC Research Dashboard - Notification Utilities
-OTP delivery (email → Telegram fallback) and bug-report notifications.
+OTP delivery via Telegram and bug-report notifications.
 """
 
-import smtplib
 import requests
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from utils.security import get_nested_secret, log_audit
 
 
-# ── OTP delivery ────────────────────────────────────────────────────────────
-
-def _send_otp_via_email(recipient_email: str, otp_code: str):
-    """Try SMTP delivery. Returns (success, error_str)."""
-    smtp_host     = get_nested_secret("smtp", "host", "smtp.gmail.com")
-    smtp_port     = int(get_nested_secret("smtp", "port", "587"))
-    smtp_user     = get_nested_secret("smtp", "user", "")
-    smtp_password = get_nested_secret("smtp", "password", "")
-
-    if not smtp_user or not smtp_password:
-        return False, "SMTP_NOT_CONFIGURED"
-
-    msg = MIMEMultipart()
-    msg["From"]    = smtp_user
-    msg["To"]      = recipient_email
-    msg["Subject"] = "ORC Dashboard – Login Verification Code"
-    msg.attach(MIMEText(
-        f"Your verification code is:\n\n{otp_code}\n\n"
-        "This code expires in 5 minutes.\n\n— ORC Research Dashboard",
-        "plain",
-    ))
-
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-        server.starttls()
-        server.login(smtp_user, smtp_password)
-        server.send_message(msg)
-        server.quit()
-        log_audit("otp_email_sent", f"To:{recipient_email[:3]}***")
-        return True, None
-    except smtplib.SMTPAuthenticationError:
-        log_audit("otp_email_auth_error")
-        return False, "SMTP authentication failed"
-    except Exception as e:
-        log_audit("otp_email_error", type(e).__name__)
-        return False, f"SMTP error: {type(e).__name__}"
-
+# ── OTP delivery ─────────────────────────────────────────────────────────────
 
 def _send_otp_via_telegram(otp_code: str):
-    """Try Telegram delivery. Returns (success, error_str)."""
+    """Send OTP via Telegram. Returns (success, error_str)."""
     bot_token = get_nested_secret("telegram", "bot_token", "")
     chat_id   = get_nested_secret("telegram", "admin_chat_id", "")
 
@@ -79,24 +40,10 @@ def _send_otp_via_telegram(otp_code: str):
 
 def send_otp_email(recipient_email: str, otp_code: str):
     """
-    Deliver OTP to the admin.
-    Tries email first; falls back to Telegram if email fails.
+    Deliver OTP via Telegram. Falls back to demo mode (on-screen) if Telegram fails.
     Returns (success, error_or_None).
     """
-    # 1. Try email
-    ok, err = _send_otp_via_email(recipient_email, otp_code)
-    if ok:
-        return True, None
-
-    log_audit("otp_email_failed_trying_telegram", err)
-
-    # 2. Fall back to Telegram
-    ok, err = _send_otp_via_telegram(otp_code)
-    if ok:
-        return True, None
-
-    # 3. Both failed
-    return False, "SMTP_NOT_CONFIGURED"
+    return _send_otp_via_telegram(otp_code)
 
 
 # ── Bug-report notifications ─────────────────────────────────────────────────

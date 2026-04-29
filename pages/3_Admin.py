@@ -350,20 +350,37 @@ else:
 
         st.divider()
         st.subheader("Telegram Notifications")
-        relay_url = get_secret("TELEGRAM_RELAY_URL")
-        tg_token  = get_nested_secret("telegram", "bot_token", "")
-        tg_chat_id = get_nested_secret("telegram", "admin_chat_id", "")
+        relay_url    = get_secret("TELEGRAM_RELAY_URL")
+        relay_secret = get_secret("TELEGRAM_RELAY_SECRET")
+        tg_token     = get_nested_secret("telegram", "bot_token", "")
+        tg_chat_id   = get_nested_secret("telegram", "admin_chat_id", "")
 
         if relay_url:
             st.success("✅ Cloudflare relay configured — Telegram OTP delivery active")
         else:
-            st.warning(
-                "⚠️ Cloudflare relay not set up. "
-                "Set `TELEGRAM_RELAY_URL` and `TELEGRAM_RELAY_SECRET` secrets to enable Telegram OTP. "
-                "Direct Telegram API is blocked at the hosting network level."
-            )
+            st.warning("⚠️ Set `TELEGRAM_RELAY_URL` and `TELEGRAM_RELAY_SECRET` secrets to enable Telegram OTP.")
         st.markdown(f"**Bot token:** {'✅ set' if tg_token else '⚪ not set'}")
         st.markdown(f"**Chat ID:** {'✅ set' if tg_chat_id else '⚪ not set'}")
+        st.markdown(f"**Relay secret:** {'✅ set' if relay_secret else '❌ missing'}")
+
+        if relay_url and st.button("📨 Send Test OTP via Telegram", key="test_tg_relay"):
+            import json, urllib.request
+            try:
+                payload = json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
+                req = urllib.request.Request(
+                    relay_url, data=payload, method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    body = r.read().decode()
+                result = json.loads(body)
+                if result.get("ok"):
+                    st.success("✅ Test message delivered! Check your Telegram.")
+                else:
+                    st.error(f"❌ Relay reached Telegram but got error: {body}")
+            except Exception as e:
+                st.error(f"❌ {type(e).__name__}: {e}")
+
 
         st.divider()
         st.subheader("Cache Management")

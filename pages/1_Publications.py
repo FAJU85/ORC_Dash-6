@@ -14,7 +14,10 @@ from utils.security import (
     sanitize_string, validate_orcid, log_audit, log_error, RateLimiter,
     can_sync_publications, is_admin
 )
-from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
+from utils.hf_data import (
+    sync_from_openalex as hf_sync, get_active_researchers,
+    sync_all_sources, start_auto_sync, stop_auto_sync, is_auto_sync_running,
+)
 from utils.export import export_to_csv, export_to_bibtex
 from utils.ui import apply_theme, render_footer, render_empty_state
 
@@ -28,26 +31,32 @@ rate_limiter = RateLimiter()
 # SYNC FUNCTION
 # ============================================
 
-def sync_publications(orcid):
-    """Sync publications from OpenAlex for the given ORCID"""
+def sync_publications(orcid, all_sources=False):
+    """Sync publications for the given ORCID from OpenAlex (or all sources)."""
     if not validate_orcid(orcid):
-        return 0, "Invalid ORCID format. Use: 0000-0000-0000-0000"
+        return {}, "Invalid ORCID format. Use: 0000-0000-0000-0000"
 
     allowed, wait_time = rate_limiter.is_allowed(f"sync_{orcid}", max_attempts=3, window_seconds=300)
     if not allowed:
-        return 0, f"Too many sync attempts. Please wait {wait_time} seconds."
+        return {}, f"Too many sync attempts. Please wait {wait_time} seconds."
 
     rate_limiter.record_attempt(f"sync_{orcid}")
     log_audit("sync_start", f"ORCID: {orcid[:8]}***")
 
-    count, error = hf_sync(orcid)
-    if error:
-        log_audit("sync_error", error)
-        log_error("sync_error", error, page="Publications")
-        return 0, error
-
-    log_audit("sync_complete", f"Inserted: {count}")
-    return count, None
+    if all_sources:
+        results = sync_all_sources(orcid)
+        total = sum(c for c, _ in results.values())
+        errors = {src: e for src, (c, e) in results.items() if e and c == 0}
+        log_audit("sync_complete", f"Total: {total}")
+        return results, None
+    else:
+        count, error = hf_sync(orcid)
+        if error:
+            log_audit("sync_error", error)
+            log_error("sync_error", error, page="Publications")
+            return {"openalex": (0, error)}, error
+        log_audit("sync_complete", f"Inserted: {count}")
+        return {"openalex": (count, None)}, None
 
 # ============================================
 # SESSION STATE
@@ -68,20 +77,50 @@ st.title("📚 Publications")
 st.header("🔄 Sync Publications")
 
 if can_sync_publications():
-    col1, col2 = st.columns([3, 1])
+    default_orcid = get_nested_secret("researcher", "orcid", "")
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
     with col1:
-        default_orcid = get_nested_secret("researcher", "orcid", "")
         orcid = st.text_input("ORCID ID", value=default_orcid, placeholder="0000-0000-0000-0000")
     with col2:
         st.write("")
-        if st.button("🔄 Sync Now", type="primary", use_container_width=True):
-            with st.spinner("Syncing publications..."):
-                count, error = sync_publications(orcid)
+        if st.button("🔄 OpenAlex", type="primary", use_container_width=True):
+            with st.spinner("Syncing…"):
+                results, error = sync_publications(orcid, all_sources=False)
             if error:
                 st.error(f"❌ {error}")
             else:
-                st.success(f"✅ Synced {count} new publications!")
+                cnt = results.get("openalex", (0, None))[0]
+                st.success(f"✅ +{cnt}")
                 st.rerun()
+    with col3:
+        st.write("")
+        if st.button("🌐 All Sources", use_container_width=True,
+                     help="Sync from OpenAlex, CrossRef, and PubMed"):
+            with st.spinner("Syncing all sources…"):
+                results, error = sync_publications(orcid, all_sources=True)
+            if error:
+                st.error(f"❌ {error}")
+            else:
+                total = sum(c for c, _ in results.values())
+                oa = results.get("openalex", (0, None))[0]
+                cr = results.get("crossref", (0, None))[0]
+                pm = results.get("pubmed",   (0, None))[0]
+                st.success(f"✅ +{total} total (OA:{oa} CR:{cr} PM:{pm})")
+                st.rerun()
+    with col4:
+        st.write("")
+        auto_on = is_auto_sync_running()
+        if auto_on:
+            if st.button("⏹ Auto-Sync", use_container_width=True,
+                         help="Stop background auto-sync"):
+                stop_auto_sync()
+                st.rerun()
+            st.caption("⏱ Active")
+        else:
+            if st.button("⏱ Auto-Sync", use_container_width=True,
+                         help="Sync all researchers every 24 h in the background"):
+                start_auto_sync(interval_hours=24)
+                st.success("✅ Auto-sync enabled")
 else:
     st.info("🔒 **Sync functionality is restricted to administrators only.**")
 

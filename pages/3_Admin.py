@@ -22,8 +22,11 @@ from utils.email_service import send_otp_email
 from utils.hf_data import (
     get_active_researchers, add_researcher, remove_researcher,
     load_publications, sync_from_openalex, load_researchers,
-    flush_audit_log, flush_error_log
+    flush_audit_log, flush_error_log,
+    sync_all_sources, sync_all_researchers,
+    start_auto_sync, stop_auto_sync, is_auto_sync_running,
 )
+from utils.security import validate_orcid
 from utils.ui import apply_theme, render_system_status, render_footer
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
@@ -41,7 +44,8 @@ for key, default in [
     ("otp_code", None),
     ("otp_expiry", None),
     ("login_email", None),
-    ("smtp_not_configured", False),
+    ("otp_via_telegram", False),
+    ("bulk_sync_results", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -124,19 +128,13 @@ if not st.session_state.admin_authenticated:
                     st.session_state.login_email = email
 
                     success, error = send_otp_email(email, otp)
+                    st.session_state.otp_sent = True
+                    st.session_state.otp_via_telegram = success
                     if success:
-                        st.session_state.otp_sent = True
-                        st.session_state.smtp_not_configured = False
-                        log_audit("otp_sent", email[:20])
-                        st.rerun()
-                    elif error == "SMTP_NOT_CONFIGURED":
-                        st.session_state.otp_sent = True
-                        st.session_state.smtp_not_configured = True
-                        log_audit("otp_demo_mode", email[:20])
-                        st.rerun()
+                        log_audit("otp_sent_telegram", email[:20])
                     else:
-                        st.error("❌ Could not send verification code")
-                        log_audit("otp_send_failed", error)
+                        log_audit("otp_fallback_screen", email[:20])
+                    st.rerun()
 
         st.divider()
         st.caption("🔒 Two-factor authentication required · A verification code will be sent to your email")
@@ -146,9 +144,11 @@ if not st.session_state.admin_authenticated:
         st.header("📱 Enter Verification Code")
         st.markdown(f"A 6-digit code has been sent to **{st.session_state.login_email[:3]}***")
 
-        if st.session_state.smtp_not_configured:
-            st.warning("⚠️ Email service not configured. Demo mode active.")
-            st.info(f"🔐 **Demo OTP:** {st.session_state.otp_code}")
+        if st.session_state.otp_via_telegram:
+            st.success("✅ Verification code sent to your Telegram bot.")
+        else:
+            st.warning("⚠️ Could not reach Telegram. Use the code below:")
+            st.info(f"🔐 **{st.session_state.otp_code}**")
 
         otp_key = f"otp_{st.session_state.login_email}"
         allowed, wait_time = rate_limiter.is_allowed(otp_key, max_attempts=5, window_seconds=300)
@@ -186,7 +186,7 @@ if not st.session_state.admin_authenticated:
                     st.session_state.otp_sent  = False
                     st.session_state.otp_code  = None
                     st.session_state.otp_expiry = None
-                    rate_limiter.reset(client_key)
+                    rate_limiter.reset("admin_login")
                     rate_limiter.reset(otp_key)
                     log_audit("admin_login_success", st.session_state.login_email[:20])
                     st.success("✅ Authentication successful!")
@@ -243,8 +243,114 @@ else:
     # ── Tab 2: Researchers ─────────────────────────────────────────────────
     with tab2:
         st.header("👥 Manage Researchers")
-        st.subheader("➕ Add New Researcher")
 
+        # ── Bulk sync all ────────────────────────────────────────────────
+        st.subheader("🔄 Bulk Sync")
+        bcol1, bcol2, bcol3 = st.columns([2, 2, 3])
+        with bcol1:
+            if st.button("🔄 Sync All Researchers", type="primary", use_container_width=True,
+                         help="Sync every researcher from OpenAlex, CrossRef, and PubMed"):
+                with st.spinner("Syncing all researchers from all sources…"):
+                    summary = sync_all_researchers(force=True)
+                    st.session_state.bulk_sync_results = summary
+                log_audit("bulk_sync_all", f"{len(summary)} researchers")
+                st.rerun()
+        with bcol2:
+            auto_running = is_auto_sync_running()
+            if auto_running:
+                if st.button("⏹ Stop Auto-Sync", use_container_width=True):
+                    stop_auto_sync()
+                    log_audit("auto_sync_stopped")
+                    st.rerun()
+                st.caption("⏱ Auto-sync is active (every 24 h)")
+            else:
+                if st.button("⏱ Enable Auto-Sync", use_container_width=True,
+                             help="Sync all researchers every 24 hours in the background"):
+                    start_auto_sync(interval_hours=24)
+                    log_audit("auto_sync_started")
+                    st.success("✅ Auto-sync enabled")
+
+        if st.session_state.bulk_sync_results:
+            st.subheader("Last Sync Results")
+            total_new = 0
+            for orcid, name, res in st.session_state.bulk_sync_results:
+                oa_cnt,  oa_err  = res.get("openalex",  (0, None))
+                cr_cnt,  cr_err  = res.get("crossref",  (0, None))
+                pm_cnt,  pm_err  = res.get("pubmed",    (0, None))
+                added = oa_cnt + cr_cnt + pm_cnt
+                total_new += added
+                status = "✅" if added > 0 else ("⚠️" if (oa_err and cr_err and pm_err) else "—")
+                st.markdown(
+                    f"{status} **{name}** — "
+                    f"OpenAlex: +{oa_cnt} · CrossRef: +{cr_cnt} · PubMed: +{pm_cnt}"
+                )
+            st.success(f"Total new publications: **{total_new}**")
+            if st.button("✖ Dismiss", key="dismiss_bulk"):
+                st.session_state.bulk_sync_results = None
+                st.rerun()
+
+        st.divider()
+
+        # ── Bulk ORCID import ────────────────────────────────────────────
+        with st.expander("📥 Bulk ORCID Import", expanded=False):
+            st.caption(
+                "Paste one ORCID per line (or upload a CSV with an 'orcid' column). "
+                "Each researcher will be added and synced."
+            )
+            bulk_text = st.text_area(
+                "ORCIDs (one per line)",
+                placeholder="0000-0000-0000-0001\n0000-0000-0000-0002",
+                height=140,
+                key="bulk_orcid_text",
+            )
+            bulk_csv = st.file_uploader("Or upload CSV", type=["csv"], key="bulk_orcid_csv")
+
+            if st.button("Import ORCIDs", type="primary", key="bulk_import_btn"):
+                lines = []
+                if bulk_csv is not None:
+                    import io as _io
+                    import pandas as _pd
+                    try:
+                        df_csv = _pd.read_csv(_io.BytesIO(bulk_csv.read()))
+                        col = next((c for c in df_csv.columns if 'orcid' in c.lower()), None)
+                        if col:
+                            lines = df_csv[col].dropna().astype(str).tolist()
+                        else:
+                            st.error("❌ CSV must have an 'orcid' column")
+                    except Exception as e:
+                        st.error(f"❌ Could not read CSV: {e}")
+                elif bulk_text.strip():
+                    lines = [l.strip() for l in bulk_text.strip().splitlines() if l.strip()]
+
+                if lines:
+                    added_ok, added_fail = 0, 0
+                    progress = st.progress(0)
+                    for i, raw_orcid in enumerate(lines):
+                        raw_orcid = raw_orcid.strip()
+                        if raw_orcid.startswith("https://orcid.org/"):
+                            raw_orcid = raw_orcid[len("https://orcid.org/"):]
+                        if not validate_orcid(raw_orcid):
+                            st.warning(f"⚠️ Invalid ORCID skipped: {raw_orcid}")
+                            added_fail += 1
+                        else:
+                            ok, err = add_researcher(orcid=raw_orcid)
+                            if ok:
+                                added_ok += 1
+                                log_audit("bulk_researcher_added", raw_orcid)
+                            elif "already exists" in (err or ""):
+                                added_ok += 1
+                            else:
+                                st.warning(f"⚠️ {raw_orcid}: {err}")
+                                added_fail += 1
+                        progress.progress((i + 1) / len(lines))
+                    st.success(f"✅ Imported {added_ok} · Skipped {added_fail}")
+                    if added_ok > 0:
+                        st.rerun()
+
+        st.divider()
+
+        # ── Add single researcher ────────────────────────────────────────
+        st.subheader("➕ Add Researcher")
         c1, c2, c3 = st.columns(3)
         with c1:
             new_orcid = st.text_input("ORCID", placeholder="0000-0000-0000-0000", key="new_orcid")
@@ -253,68 +359,69 @@ else:
         with c3:
             new_inst  = st.text_input("Institution", placeholder="University/Organization", key="new_inst")
 
-        if st.button("Add Researcher", type="primary"):
-            if new_orcid:
-                ok, err = add_researcher(orcid=new_orcid, name=new_name, institution=new_inst)
+        if st.button("Add Researcher", type="primary", key="add_researcher_btn"):
+            raw = new_orcid.strip()
+            if raw.startswith("https://orcid.org/"):
+                raw = raw[len("https://orcid.org/"):]
+            if not raw:
+                st.warning("Please enter an ORCID")
+            elif not validate_orcid(raw):
+                st.error("❌ Invalid ORCID format. Use: 0000-0000-0000-0000")
+            else:
+                ok, err = add_researcher(orcid=raw, name=new_name, institution=new_inst)
                 if ok:
-                    st.success(f"✅ Added: {new_name or new_orcid}")
-                    log_audit("researcher_added", new_orcid)
+                    st.success(f"✅ Added: {new_name or raw}")
+                    log_audit("researcher_added", raw)
                     st.rerun()
                 else:
                     st.error(f"❌ {err}")
-            else:
-                st.warning("Please enter an ORCID")
 
         st.divider()
+
+        # ── Current researchers ──────────────────────────────────────────
         st.subheader("📋 Current Researchers")
 
         researchers = get_active_researchers()
         if researchers:
-            # Header row
             hc1, hc2, hc3, hc4, hc5 = st.columns([3, 2, 1, 1, 1])
-            with hc1:
-                st.caption("**Researcher**")
-            with hc2:
-                st.caption("**Institution**")
-            with hc3:
-                st.caption("**Pubs**")
-            with hc4:
-                st.caption("**Sync**")
-            with hc5:
-                st.caption("**Remove**")
+            with hc1: st.caption("**Researcher**")
+            with hc2: st.caption("**Institution**")
+            with hc3: st.caption("**Pubs**")
+            with hc4: st.caption("**Sync (all sources)**")
+            with hc5: st.caption("**Remove**")
             st.divider()
 
             for r in researchers:
-                with st.container():
-                    c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1])
-                    with c1:
-                        st.markdown(f"**{r.get('name') or r.get('orcid', '')[:8]}…**")
-                        st.caption(f"ORCID: {r.get('orcid', 'N/A')}")
-                    with c2:
-                        st.caption(f"🏛️ {r.get('institution', 'Not specified')}")
-                    with c3:
-                        pubs = load_publications(orcid=r.get('orcid'))
-                        st.caption(f"📄 {len(pubs)} pubs")
-                    with c4:
-                        if st.button("🔄 Sync", key=f"sync_{r.get('orcid')}", help="Sync from OpenAlex"):
-                            with st.spinner("Syncing…"):
-                                cnt, err = sync_from_openalex(r.get('orcid'))
-                            if err:
-                                st.error(f"❌ {err}")
-                            else:
-                                st.success(f"✅ +{cnt}")
-                                log_audit("researcher_sync", f"{r.get('orcid')}: +{cnt}")
-                                st.rerun()
-                    with c5:
-                        if st.button("🗑️", key=f"del_{r.get('orcid')}", help="Remove researcher"):
-                            ok, err = remove_researcher(r.get('orcid'))
-                            if ok:
-                                st.success("✅ Removed")
-                                log_audit("researcher_removed", r.get('orcid'))
-                                st.rerun()
-                            else:
-                                st.error(f"❌ {err}")
-                    st.divider()
+                orcid_r = r.get('orcid', '')
+                c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 1, 1])
+                with c1:
+                    st.markdown(f"**{r.get('name') or orcid_r[:8]}…**")
+                    st.caption(f"ORCID: {orcid_r}")
+                with c2:
+                    st.caption(f"🏛️ {r.get('institution', 'Not specified')}")
+                with c3:
+                    pubs = load_publications(orcid=orcid_r)
+                    st.caption(f"📄 {len(pubs)}")
+                with c4:
+                    if st.button("🔄", key=f"sync_{orcid_r}",
+                                 help="Sync from OpenAlex, CrossRef & PubMed"):
+                        with st.spinner("Syncing…"):
+                            res = sync_all_sources(orcid_r)
+                        oa, cr, pm = res["openalex"][0], res["crossref"][0], res["pubmed"][0]
+                        total = oa + cr + pm
+                        st.success(f"+{total} (OA:{oa} CR:{cr} PM:{pm})")
+                        log_audit("researcher_sync", f"{orcid_r}: +{total}")
+                        st.rerun()
+                with c5:
+                    if st.button("🗑️", key=f"del_{orcid_r}", help="Remove researcher"):
+                        ok, err = remove_researcher(orcid_r)
+                        if ok:
+                            st.success("✅ Removed")
+                            log_audit("researcher_removed", orcid_r)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {err}")
+                st.divider()
         else:
             st.info("No researchers added yet.")
 
@@ -323,7 +430,10 @@ else:
         st.header("System Settings")
 
         st.subheader("AI Configuration")
-        ai_configured = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY") or get_secret("GROQ_API"))
+        ai_configured = bool(
+            get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+            or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
+        )
         if ai_configured:
             st.success("✅ AI assistant is configured and ready.")
         else:
@@ -355,7 +465,7 @@ else:
 
         col_load, _ = st.columns([1, 3])
         with col_load:
-            if st.button("🔄 Load from Storage"):
+            if st.button("🔄 Load from Storage", key="load_audit"):
                 load_audit_log_from_hf()
                 st.success("Loaded!")
 
@@ -401,7 +511,7 @@ else:
 
         action_col1, action_col2, _ = st.columns([1, 1, 3])
         with action_col1:
-            if st.button("🔄 Load from Storage"):
+            if st.button("🔄 Load from Storage", key="load_errors"):
                 load_error_log_from_hf()
                 st.success("Loaded!")
         with action_col2:

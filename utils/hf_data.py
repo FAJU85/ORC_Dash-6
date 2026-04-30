@@ -320,6 +320,331 @@ def sync_from_openalex(orcid, force=False):
     except Exception as e:
         return 0, str(e)
 
+
+# ============================================
+# CROSSREF SYNC
+# ============================================
+
+def sync_from_crossref(orcid, force=False):
+    """
+    Sync publications from CrossRef API for a given ORCID.
+    Returns (new_count, error_message).
+    """
+    import requests
+    import re as _re
+
+    orcid = orcid.strip()
+    if orcid.startswith("https://orcid.org/"):
+        orcid = orcid[len("https://orcid.org/"):]
+
+    try:
+        url = (
+            f"https://api.crossref.org/works"
+            f"?filter=orcid:{orcid}"
+            f"&rows=200&sort=published&order=desc"
+            f"&select=DOI,title,abstract,published,container-title,is-referenced-by-count,author"
+        )
+        polite_email = os.environ.get("OPEN_ALEX", "")
+        headers = {}
+        if polite_email:
+            headers["User-Agent"] = f"ORC-Dashboard/1.0 (mailto:{polite_email})"
+
+        resp = None
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, headers=headers, timeout=30)
+                if resp.status_code == 200:
+                    break
+                resp = None
+            except requests.RequestException:
+                pass
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+
+        if resp is None or resp.status_code != 200:
+            return 0, "Could not fetch from CrossRef after retries"
+
+        items = resp.json().get("message", {}).get("items", [])
+        if not items:
+            return 0, "No publications found for this ORCID on CrossRef"
+
+        publications = load_publications()
+        existing_ids = {p.get('id') for p in publications}
+        existing_dois = {p.get('doi') for p in publications if p.get('doi')}
+
+        new_count = 0
+        for item in items:
+            doi = (item.get("DOI") or "").strip() or None
+            if doi and doi in existing_dois:
+                continue
+
+            work_id = f"crossref_{doi or str(new_count)}"
+            if work_id in existing_ids:
+                continue
+
+            title_list = item.get("title", [])
+            title = title_list[0] if title_list else "Untitled"
+
+            container = item.get("container-title", [])
+            journal = container[0] if container else "Unknown"
+
+            published = item.get("published", {})
+            date_parts = published.get("date-parts", [[None]])
+            year = date_parts[0][0] if date_parts and date_parts[0] else None
+
+            authors_raw = item.get("author", [])
+            authors = [
+                f"{a.get('given', '')} {a.get('family', '')}".strip()
+                for a in authors_raw[:10]
+            ]
+
+            abstract = item.get("abstract", "") or ""
+            abstract = _re.sub(r'<[^>]+>', '', abstract).strip()
+
+            pub = {
+                "id": work_id,
+                "doi": doi,
+                "title": title,
+                "abstract": abstract,
+                "publication_year": year,
+                "journal_name": journal,
+                "citation_count": item.get("is-referenced-by-count", 0) or 0,
+                "open_access": 0,
+                "source": "crossref",
+                "authors": authors,
+                "orcid": orcid,
+                "synced_at": datetime.now().isoformat(),
+                "schema_version": SCHEMA_VERSION,
+            }
+            publications.append(pub)
+            existing_ids.add(work_id)
+            if doi:
+                existing_dois.add(doi)
+            new_count += 1
+
+        if new_count > 0:
+            success, error = save_publications(publications)
+            if error:
+                return 0, error
+
+        return new_count, None
+
+    except Exception as e:
+        return 0, str(e)
+
+
+# ============================================
+# PUBMED SYNC
+# ============================================
+
+def sync_from_pubmed(orcid, force=False):
+    """
+    Sync publications from PubMed E-utilities for a given ORCID.
+    Returns (new_count, error_message).
+    """
+    import requests
+
+    orcid = orcid.strip()
+    if orcid.startswith("https://orcid.org/"):
+        orcid = orcid[len("https://orcid.org/"):]
+
+    try:
+        esearch_url = (
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+            f"?db=pubmed&term={orcid}[auid]&retmax=200&retmode=json"
+        )
+        resp = None
+        for attempt in range(3):
+            try:
+                resp = requests.get(esearch_url, timeout=30)
+                if resp.status_code == 200:
+                    break
+                resp = None
+            except requests.RequestException:
+                pass
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+
+        if resp is None or resp.status_code != 200:
+            return 0, "Could not fetch from PubMed after retries"
+
+        pmids = resp.json().get("esearchresult", {}).get("idlist", [])
+        if not pmids:
+            return 0, "No publications found for this ORCID on PubMed"
+
+        ids_str = ",".join(pmids[:200])
+        efetch_url = (
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+            f"?db=pubmed&id={ids_str}&retmode=json"
+        )
+        resp2 = None
+        for attempt in range(3):
+            try:
+                resp2 = requests.get(efetch_url, timeout=30)
+                if resp2.status_code == 200:
+                    break
+                resp2 = None
+            except requests.RequestException:
+                pass
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+
+        if resp2 is None or resp2.status_code != 200:
+            return 0, "Could not fetch PubMed article details"
+
+        result_map = resp2.json().get("result", {})
+
+        publications = load_publications()
+        existing_ids = {p.get('id') for p in publications}
+        existing_dois = {p.get('doi') for p in publications if p.get('doi')}
+
+        new_count = 0
+        for pmid in pmids:
+            art = result_map.get(pmid, {})
+            if not art or art.get("uid") != pmid:
+                continue
+
+            doi = None
+            for art_id in art.get("articleids", []):
+                if art_id.get("idtype") == "doi":
+                    doi = art_id.get("value") or None
+                    break
+
+            if doi and doi in existing_dois:
+                continue
+
+            work_id = f"pubmed_{pmid}"
+            if work_id in existing_ids:
+                continue
+
+            authors_raw = art.get("authors", [])
+            authors = [a.get("name", "") for a in authors_raw[:10] if a.get("name")]
+
+            pub_date = art.get("pubdate", "")
+            year = None
+            try:
+                year = int(pub_date[:4])
+            except (ValueError, TypeError):
+                pass
+
+            pub = {
+                "id": work_id,
+                "doi": doi,
+                "title": art.get("title", "Untitled"),
+                "abstract": "",
+                "publication_year": year,
+                "journal_name": art.get("fulljournalname") or art.get("source") or "Unknown",
+                "citation_count": 0,
+                "open_access": 0,
+                "source": "pubmed",
+                "authors": authors,
+                "orcid": orcid,
+                "synced_at": datetime.now().isoformat(),
+                "schema_version": SCHEMA_VERSION,
+            }
+            publications.append(pub)
+            existing_ids.add(work_id)
+            if doi:
+                existing_dois.add(doi)
+            new_count += 1
+
+        if new_count > 0:
+            success, error = save_publications(publications)
+            if error:
+                return 0, error
+
+        return new_count, None
+
+    except Exception as e:
+        return 0, str(e)
+
+
+# ============================================
+# MULTI-SOURCE SYNC
+# ============================================
+
+def sync_all_sources(orcid, force=False):
+    """
+    Sync from OpenAlex, CrossRef, and PubMed.
+    Returns dict: {"openalex": (count, err), "crossref": (count, err), "pubmed": (count, err)}
+    """
+    return {
+        "openalex": sync_from_openalex(orcid, force=force),
+        "crossref": sync_from_crossref(orcid, force=force),
+        "pubmed": sync_from_pubmed(orcid, force=force),
+    }
+
+
+# ============================================
+# BULK RESEARCHER SYNC
+# ============================================
+
+def sync_all_researchers(force=False):
+    """
+    Sync all active researchers from all sources.
+    Returns list of (orcid, name, results_dict).
+    """
+    researchers = get_active_researchers()
+    summary = []
+    for r in researchers:
+        orcid = r.get("orcid", "")
+        name = r.get("name", orcid)
+        if not orcid:
+            continue
+        results = sync_all_sources(orcid, force=force)
+        summary.append((orcid, name, results))
+    return summary
+
+
+# ============================================
+# AUTO-SYNC SCHEDULER
+# ============================================
+
+_scheduler_lock = threading.Lock()
+_scheduler_running = False
+_scheduler_thread = None
+
+
+def start_auto_sync(interval_hours=24):
+    """
+    Start a background thread that syncs all researchers every interval_hours.
+    Safe to call multiple times — only one scheduler runs at a time.
+    """
+    global _scheduler_running, _scheduler_thread
+
+    with _scheduler_lock:
+        if _scheduler_running:
+            return
+
+        def _loop():
+            global _scheduler_running
+            while _scheduler_running:
+                try:
+                    sync_all_researchers(force=True)
+                except Exception:
+                    pass
+                for _ in range(interval_hours * 60):
+                    if not _scheduler_running:
+                        break
+                    time.sleep(60)
+
+        _scheduler_running = True
+        _scheduler_thread = threading.Thread(target=_loop, daemon=True, name="orc-auto-sync")
+        _scheduler_thread.start()
+
+
+def stop_auto_sync():
+    """Stop the background sync scheduler."""
+    global _scheduler_running
+    with _scheduler_lock:
+        _scheduler_running = False
+
+
+def is_auto_sync_running():
+    """Check if the auto-sync scheduler is active."""
+    return _scheduler_running
+
+
 # ============================================
 # AUDIT LOG PERSISTENCE
 # ============================================

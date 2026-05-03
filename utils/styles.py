@@ -123,48 +123,39 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 /* ── Layout ─────────────────────────────────────────── */
 .block-container { padding-top: 1.5rem !important; max-width: 1200px !important; }
 
-/* ── Smooth transitions ─────────────────────────────── */
-.stApp { transition: background-color 0.2s ease; }
-
 /* ── Card ───────────────────────────────────────────── */
 .orc-card {
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 0.75rem;
-    transition: box-shadow 0.18s ease, transform 0.14s ease;
+    border-radius: 6px;
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 0.65rem;
 }
-.orc-card:hover { transform: translateY(-1px); }
 
 /* ── Metric card ─────────────────────────────────────── */
 .orc-metric {
-    border-radius: 8px;
-    padding: 1.5rem 1.25rem;
+    border-radius: 6px;
+    padding: 1.4rem 1.1rem;
     text-align: center;
-    transition: transform 0.14s ease, box-shadow 0.18s ease;
 }
-.orc-metric:hover { transform: translateY(-2px); }
-.orc-metric .orc-metric-icon { font-size: 1.4rem; margin-bottom: 0.45rem; opacity: 0.8; }
+.orc-metric .orc-metric-icon { font-size: 1.3rem; margin-bottom: 0.4rem; opacity: 0.75; }
 .orc-metric .orc-metric-val  {
-    font-size: 1.9rem; font-weight: 700; line-height: 1.1;
+    font-size: 1.85rem; font-weight: 700; line-height: 1.1;
     letter-spacing: -0.02em;
 }
 .orc-metric .orc-metric-lbl  {
-    font-size: 0.7rem; font-weight: 600; margin-top: 0.3rem;
-    text-transform: uppercase; letter-spacing: 0.07em; opacity: 0.55;
+    font-size: 0.68rem; font-weight: 600; margin-top: 0.3rem;
+    text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.55;
 }
 
 /* ── Publication card ───────────────────────────────── */
 .orc-pub {
-    border-radius: 8px;
-    padding: 1rem 1.25rem 1rem 1.5rem;
-    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem 0.9rem 1.4rem;
+    margin-bottom: 0.45rem;
     border-left: 3px solid transparent;
-    transition: box-shadow 0.18s ease, transform 0.14s ease;
     position: relative;
 }
-.orc-pub:hover { transform: translateX(3px); }
-.orc-pub .orc-pub-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.3rem; line-height: 1.45; }
-.orc-pub .orc-pub-meta  { font-size: 0.79rem; margin: 0.1rem 0 0; opacity: 0.72; }
+.orc-pub .orc-pub-title { font-size: 0.93rem; font-weight: 600; margin: 0 0 0.25rem; line-height: 1.45; }
+.orc-pub .orc-pub-meta  { font-size: 0.77rem; margin: 0.1rem 0 0; opacity: 0.7; }
 
 /* ── Badges ─────────────────────────────────────────── */
 .orc-badge {
@@ -238,16 +229,19 @@ hr { margin: 1.25rem 0 !important; }
 _DARK_CSS = """
 <style>
 /* Global */
-.stApp                                  {{ background-color: {bg}; }}
+.stApp                                  {{ background-color: {bg} !important; color: {text} !important; }}
 .stApp, .stApp p, .stApp span,
-.stApp li, .stApp label                 {{ color: {text}; }}
+.stApp li, .stApp label                 {{ color: {text} !important; }}
 .stApp h1,.stApp h2,.stApp h3,
 .stApp h4,.stApp h5,.stApp h6           {{ color: {text} !important; }}
+[data-testid="stAppViewContainer"]      {{ background-color: {bg} !important; }}
+[data-testid="stMain"]                  {{ background-color: {bg} !important; }}
+.main .block-container                  {{ background-color: {bg} !important; }}
 
 /* Streamlit chrome */
 .stMetric label                         {{ color: {text2} !important; }}
 .stMetric [data-testid="stMetricValue"] {{ color: {text}  !important; }}
-[data-testid="stSidebar"]               {{ background-color: {surface}; border-right: 1px solid {border}; }}
+[data-testid="stSidebar"]               {{ background-color: {surface} !important; border-right: 1px solid {border}; }}
 hr                                      {{ border-color: {border} !important; opacity: 1 !important; }}
 
 /* Inputs */
@@ -258,33 +252,37 @@ hr                                      {{ border-color: {border} !important; op
 [data-baseweb="popover"] [role="option"] {{ background: {surface2} !important; color: {text}  !important; }}
 
 /* Buttons */
-.stButton > button                      {{ background: {surface2}; border: 1px solid {border}; color: {text}; font-weight: 500; border-radius: 6px; transition: border-color 0.15s, color 0.15s; }}
-.stButton > button:hover                {{ border-color: {accent}; color: {accent}; }}
-.stButton > button[kind="primary"]      {{ background: {accent}; border-color: {accent}; color: #ffffff; }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.87; }}
+.stButton > button                      {{ background: {surface2} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; border-radius: 6px !important; }}
+.stButton > button:hover                {{ border-color: {accent} !important; color: {accent} !important; }}
+.stButton > button[kind="primary"]      {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.87 !important; }}
+[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; }}
+
+/* Download button */
+[data-testid="stDownloadButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; font-weight: 500 !important; }}
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"]   {{ background: transparent; border-bottom: 1px solid {border}; }}
-.stTabs [data-baseweb="tab"]        {{ color: {text2}; background: transparent; border-bottom: 2px solid transparent; margin-bottom: -1px; }}
+.stTabs [data-baseweb="tab-list"]   {{ background: transparent !important; border-bottom: 1px solid {border}; }}
+.stTabs [data-baseweb="tab"]        {{ color: {text2} !important; background: transparent !important; border-bottom: 2px solid transparent; margin-bottom: -1px; }}
 .stTabs [aria-selected="true"]      {{ color: {accent} !important; border-bottom-color: {accent} !important; background: transparent !important; font-weight: 600 !important; }}
 
 /* Expander */
 .streamlit-expanderHeader           {{ color: {text} !important; }}
-[data-testid="stExpander"]          {{ border: 1px solid {border}; background: {surface}; }}
+[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface};  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.6); }}
-.orc-metric  {{ background: {surface};  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.6); }}
+.orc-card    {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
+.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}
-.orc-pub     {{ background: {surface};  border-left-color: {accent}; box-shadow: 0 1px 3px rgba(1,4,9,.4); }}
+.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 2px rgba(1,4,9,.3); }}
 .orc-pub .orc-pub-title {{ color: {text};  }}
 .orc-pub .orc-pub-meta  {{ color: {text2}; }}
 
 /* Hero */
-.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%); border: 1px solid {border}; }}
-.orc-hero h1 {{ color: {text};  }}
-.orc-hero p  {{ color: {text2}; }}
+.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%) !important; border: 1px solid {border}; }}
+.orc-hero h1 {{ color: {text} !important;  }}
+.orc-hero p  {{ color: {text2} !important; }}
 
 /* Badges */
 .orc-badge-oa     {{ background: rgba(63,185,80,.12);  color: {success}; }}
@@ -293,7 +291,10 @@ hr                                      {{ border-color: {border} !important; op
 .orc-badge-closed {{ background: rgba(110,118,129,.15);color: {muted};   }}
 
 /* Section title */
-.orc-section-title {{ color: {text2}; border-bottom: 1px solid {border}; }}
+.orc-section-title {{ color: {text2} !important; border-bottom: 1px solid {border}; }}
+
+/* Alert/info boxes */
+[data-testid="stAlert"]             {{ border-radius: 6px !important; }}
 </style>
 """
 
@@ -301,16 +302,19 @@ hr                                      {{ border-color: {border} !important; op
 _LIGHT_CSS = """
 <style>
 /* Global */
-.stApp                                  {{ background-color: {bg}; }}
+.stApp                                  {{ background-color: {bg} !important; color: {text} !important; }}
 .stApp, .stApp p, .stApp span,
-.stApp li, .stApp label                 {{ color: {text}; }}
+.stApp li, .stApp label                 {{ color: {text} !important; }}
 .stApp h1,.stApp h2,.stApp h3,
 .stApp h4,.stApp h5,.stApp h6           {{ color: {text} !important; }}
+[data-testid="stAppViewContainer"]      {{ background-color: {bg} !important; }}
+[data-testid="stMain"]                  {{ background-color: {bg} !important; }}
+.main .block-container                  {{ background-color: {bg} !important; }}
 
 /* Streamlit chrome */
 .stMetric label                         {{ color: {text2} !important; }}
 .stMetric [data-testid="stMetricValue"] {{ color: {text}  !important; }}
-[data-testid="stSidebar"]               {{ background-color: {surface}; border-right: 1px solid {border}; }}
+[data-testid="stSidebar"]               {{ background-color: {surface} !important; border-right: 1px solid {border}; }}
 hr                                      {{ border-color: {border} !important; opacity: 1 !important; }}
 
 /* Inputs */
@@ -321,33 +325,37 @@ hr                                      {{ border-color: {border} !important; op
 [data-baseweb="popover"] [role="option"] {{ background: {surface} !important; color: {text} !important; }}
 
 /* Buttons */
-.stButton > button                      {{ background: {bg}; border: 1px solid {border}; color: {text}; font-weight: 500; border-radius: 6px; transition: border-color 0.15s, color 0.15s, background 0.15s; }}
-.stButton > button:hover                {{ border-color: {accent}; color: {accent}; background: {surface}; }}
-.stButton > button[kind="primary"]      {{ background: {accent}; border-color: {accent}; color: #ffffff; }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.88; }}
+.stButton > button                      {{ background: {bg} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; border-radius: 6px !important; }}
+.stButton > button:hover                {{ border-color: {accent} !important; color: {accent} !important; background: {surface} !important; }}
+.stButton > button[kind="primary"]      {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.88 !important; }}
+[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; }}
+
+/* Download button */
+[data-testid="stDownloadButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; font-weight: 500 !important; }}
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"]   {{ background: transparent; border-bottom: 1px solid {border}; }}
-.stTabs [data-baseweb="tab"]        {{ color: {text2}; background: transparent; border-bottom: 2px solid transparent; margin-bottom: -1px; }}
+.stTabs [data-baseweb="tab-list"]   {{ background: transparent !important; border-bottom: 1px solid {border}; }}
+.stTabs [data-baseweb="tab"]        {{ color: {text2} !important; background: transparent !important; border-bottom: 2px solid transparent; margin-bottom: -1px; }}
 .stTabs [aria-selected="true"]      {{ color: {accent} !important; border-bottom-color: {accent} !important; background: transparent !important; font-weight: 600 !important; }}
 
 /* Expander */
 .streamlit-expanderHeader           {{ color: {text} !important; }}
-[data-testid="stExpander"]          {{ border: 1px solid {border}; background: {surface}; }}
+[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface};  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.06); }}
-.orc-metric  {{ background: {surface};  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.06); }}
+.orc-card    {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
+.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}
-.orc-pub     {{ background: {surface};  border-left-color: {accent}; box-shadow: 0 1px 2px rgba(31,35,40,.06); }}
+.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 2px rgba(31,35,40,.06); }}
 .orc-pub .orc-pub-title {{ color: {text};  }}
 .orc-pub .orc-pub-meta  {{ color: {text2}; }}
 
 /* Hero */
-.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%); border: 1px solid {border}; }}
-.orc-hero h1 {{ color: {text};  }}
-.orc-hero p  {{ color: {text2}; }}
+.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%) !important; border: 1px solid {border}; }}
+.orc-hero h1 {{ color: {text} !important;  }}
+.orc-hero p  {{ color: {text2} !important; }}
 
 /* Badges */
 .orc-badge-oa     {{ background: rgba(26,127,55,.1);   color: {success}; }}
@@ -356,7 +364,10 @@ hr                                      {{ border-color: {border} !important; op
 .orc-badge-closed {{ background: rgba(110,119,129,.1); color: {muted};   }}
 
 /* Section title */
-.orc-section-title {{ color: {text2}; border-bottom: 1px solid {border}; }}
+.orc-section-title {{ color: {text2} !important; border-bottom: 1px solid {border}; }}
+
+/* Alert/info boxes */
+[data-testid="stAlert"]             {{ border-radius: 6px !important; }}
 </style>
 """
 

@@ -27,6 +27,27 @@ rate_limiter = RateLimiter()
 # ============================================
 
 def get_ai_response(message, paper=None):
+    """
+    Generate an assistant response for a user message, optionally grounded in metadata from a selected paper.
+    
+    Builds a chat request (including a system prompt and recent chat history), sends it to the configured Groq-backed AI model, and returns the model's reply or a concrete error message when the request cannot be fulfilled.
+    
+    Parameters:
+        message (str): The user's input to send to the AI.
+        paper (dict | None): Optional paper metadata used to ground responses. Expected keys include
+            'title', 'journal_name', 'publication_year', 'citation_count', and 'abstract'. Only the first
+            800 characters of the abstract are used.
+    
+    Returns:
+        tuple:
+            response (str | None): The assistant's reply on success, or `None` if an error occurred.
+            error (str | None): `None` on success, or a human-readable error string on failure. Possible
+                error values include:
+                - "Rate limit exceeded. Please wait {seconds} seconds."
+                - "AI service not configured"
+                - "AI library not available"
+                - "AI service temporarily unavailable"
+    """
     session_id = st.session_state.get('session_token', 'default')
     allowed, wait_time = rate_limiter.is_allowed(f"ai_{session_id}", max_attempts=20, window_seconds=60)
     if not allowed:

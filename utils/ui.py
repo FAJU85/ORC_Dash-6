@@ -32,9 +32,9 @@ def get_chart_theme() -> dict:
     return chart_layout()
 
 
-@st.cache_data(ttl=300)
-def _check_openalex() -> bool:
-    """Cached OpenAlex connectivity check (at most once every 5 minutes)."""
+@st.cache_data(ttl=120)
+def check_openalex_status() -> bool:
+    """Cached OpenAlex connectivity check (at most once every 2 minutes)."""
     try:
         r = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
         return r.status_code == 200
@@ -66,7 +66,7 @@ def render_system_status(show_email: bool = False, show_telegram: bool = False) 
         get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
         or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
     )
-    oa_ok = _check_openalex()
+    oa_ok = check_openalex_status()
 
     cols[0].markdown(_card("Database",    db_ok, "Connected",  "Not configured"), unsafe_allow_html=True)
     cols[1].markdown(_card("AI Service",  ai_ok, "Ready",      "Not configured"), unsafe_allow_html=True)

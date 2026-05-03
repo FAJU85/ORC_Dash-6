@@ -9,8 +9,6 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import requests
-
 from utils.security import (
     get_secret, get_nested_secret, execute_query,
     is_db_configured, init_session, log_audit
@@ -21,6 +19,7 @@ from utils.styles import (
     metric_card_html, pub_card_html, section_title_html,
     hero_html, footer_html, DARK, LIGHT
 )
+from utils.ui import check_openalex_status
 
 st.set_page_config(
     page_title="ORC Research Dashboard",
@@ -102,14 +101,6 @@ else:
 st.markdown(section_title_html("System Status"), unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=120)
-def _openalex_status() -> bool:
-    try:
-        return requests.get("https://api.openalex.org/works?per_page=1", timeout=4).status_code == 200
-    except Exception:
-        return False
-
-
 def _dot(ok: bool) -> str:
     """
     Return an HTML span representing a status dot colored for success or warning.
@@ -152,7 +143,7 @@ def _status_block(icon, label, ok, detail):
 
 db_ok = is_db_configured()
 ai_ok = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"))
-oa_ok = _openalex_status()
+oa_ok = check_openalex_status()
 
 c1, c2, c3 = st.columns(3)
 c1.markdown(_status_block("🗄️", "Data Storage",  db_ok, "Not configured"), unsafe_allow_html=True)

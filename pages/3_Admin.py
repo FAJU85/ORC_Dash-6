@@ -389,21 +389,25 @@ else:
         if relay_url and st.button("📨 Send Test OTP via Telegram", key="test_tg_relay"):
             import json as _json
             import urllib.request
-            try:
-                payload = _json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
-                req_obj = urllib.request.Request(
-                    relay_url, data=payload, method="POST",
-                    headers={"Content-Type": "application/json"},
-                )
-                with urllib.request.urlopen(req_obj, timeout=15) as r:
-                    body = r.read().decode()
-                result = _json.loads(body)
-                if result.get("ok"):
-                    st.success("✅ Test message delivered! Check your Telegram.")
-                else:
-                    st.error(f"❌ Relay reached Telegram but got error: {body}")
-            except Exception as e:
-                st.error(f"❌ {type(e).__name__}: {e}")
+            import urllib.parse
+            if urllib.parse.urlparse(relay_url).scheme != "https":
+                st.error("❌ TELEGRAM_RELAY_URL must use HTTPS")
+            else:
+                try:
+                    payload = _json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
+                    req_obj = urllib.request.Request(
+                        relay_url, data=payload, method="POST",
+                        headers={"Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(req_obj, timeout=15) as r:
+                        body = r.read().decode()
+                    result = _json.loads(body)
+                    if result.get("ok"):
+                        st.success("✅ Test message delivered! Check your Telegram.")
+                    else:
+                        st.error(f"❌ Relay reached Telegram but got error: {body}")
+                except Exception as e:
+                    st.error(f"❌ {type(e).__name__}: {e}")
 
         st.markdown(section_title_html("Maintenance"), unsafe_allow_html=True)
         mc1, mc2 = st.columns(2)
@@ -446,10 +450,11 @@ else:
             _SUCCESS = {"admin_login_success", "sync_complete", "researcher_added",
                         "researcher_removed", "researcher_sync", "cache_cleared"}
 
+            from html import escape as _esc_h
             for entry in reversed(audit_log[-50:]):
-                ts     = entry.get('timestamp', '')[:19]
-                action = entry.get('action', 'unknown')
-                detail = entry.get('details', '')
+                ts     = _esc_h(entry.get('timestamp', '')[:19])
+                action = _esc_h(entry.get('action', 'unknown'))
+                detail = _esc_h(entry.get('details', ''))
 
                 if action in _DANGER:
                     icon, color = "🔴", "#ef4444"

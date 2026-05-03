@@ -427,22 +427,7 @@ def _esc(v) -> str:
 
 def pub_card_html(title: str, authors: list, journal: str, year,
                   citations: int, is_oa: bool, abstract: str = "") -> str:
-    """
-                  Builds an HTML string for a publication card containing title, authors, journal, badges, and an optional abstract snippet.
-                  
-                  Parameters:
-                      title (str): Publication title.
-                      authors (list): Sequence of author names; up to the first three truthy names are shown joined by ", ". If more than three authors exist, a " +N" suffix indicates the remaining count.
-                      journal (str): Name of the journal (rendered with a leading newspaper emoji).
-                      year: Year value; if truthy a year badge is added.
-                      citations (int): If truthy, adds a citations badge formatted with thousand separators (e.g., "1,234 citations").
-                      is_oa (bool): If True adds an "Open Access" badge; otherwise adds a "Subscription" badge.
-                      abstract (str): Optional abstract text; when provided it is truncated to 220 characters and appended with "…" if truncated.
-                  
-                  Returns:
-                      str: HTML markup for a div with class "orc-pub" containing the assembled publication card.
-                  """
-                  auth_html = ""
+    auth_html = ""
     if authors:
         shown = ", ".join(_esc(a) for a in authors[:3] if a)
         if len(authors) > 3:

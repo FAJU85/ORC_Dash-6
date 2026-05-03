@@ -8,12 +8,11 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import requests
-
 from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, DARK, LIGHT
+from utils.ui import check_openalex_status
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
 apply_styles()
@@ -176,14 +175,6 @@ else:
 st.markdown(section_title_html("Connection Status"), unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=120)
-def _openalex_status() -> bool:
-    try:
-        return requests.get("https://api.openalex.org/works?per_page=1", timeout=5).status_code == 200
-    except Exception:
-        return False
-
-
 def _conn_card(label, ok, ok_txt, fail_txt):
     """
     Builds an HTML status card for a connection check.
@@ -207,7 +198,7 @@ def _conn_card(label, ok, ok_txt, fail_txt):
     )
 
 
-oa_ok = _openalex_status()
+oa_ok = check_openalex_status()
 
 cc1, cc2, cc3 = st.columns(3)
 cc1.markdown(_conn_card("Database",    is_db_configured(),                                          "Connected",  "Not configured"), unsafe_allow_html=True)

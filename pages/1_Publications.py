@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import (
     get_secret, get_nested_secret, execute_query,
-    sanitize_string, validate_orcid, log_audit, RateLimiter,
+    sanitize_string, validate_orcid, log_audit, log_error, RateLimiter,
     can_sync_publications, is_admin
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
@@ -22,7 +22,6 @@ from utils.styles import (
 )
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
-
 apply_styles()
 
 colors = DARK if get_theme() == "dark" else LIGHT
@@ -48,6 +47,7 @@ def sync_publications(orcid):
     count, error = hf_sync(orcid)
     if error:
         log_audit("sync_error", error)
+        log_error("sync_error", error, page="Publications")
         return 0, error
 
     log_audit("sync_complete", f"Inserted: {count}")
@@ -107,7 +107,7 @@ if not pubs:
         f'<div class="orc-card" style="text-align:center;padding:2.5rem;">'
         f'<div style="font-size:2.5rem;margin-bottom:0.75rem">📭</div>'
         f'<div style="font-weight:600;font-size:1rem;margin-bottom:0.25rem">No publications yet</div>'
-        f'<div style="font-size:0.85rem;opacity:0.6">Use Sync Now to fetch publications from OpenAlex</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use Sync Now to fetch publications from OpenAlex</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -217,11 +217,18 @@ st.session_state.current_page = min(max(1, st.session_state.current_page), total
 start = (st.session_state.current_page - 1) * PER_PAGE
 page_items = filtered[start:start + PER_PAGE]
 
-st.markdown(
-    f'<p style="font-size:0.82rem;opacity:0.6;margin:0.5rem 0 0.75rem">'
-    f'Showing {start + 1}–{min(start + PER_PAGE, len(filtered))} of {len(filtered)} publications</p>',
-    unsafe_allow_html=True,
-)
+if filtered:
+    st.markdown(
+        f'<p style="font-size:0.82rem;opacity:0.6;margin:0.5rem 0 0.75rem">'
+        f'Showing {start + 1}–{min(start + PER_PAGE, len(filtered))} of {len(filtered)} publications</p>',
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        f'<p style="font-size:0.82rem;color:{colors["text2"]};margin:0.5rem 0 0.75rem">'
+        f'No publications match the current filters</p>',
+        unsafe_allow_html=True,
+    )
 
 # ── Publication Cards ───────────────────────────────────────────────────────
 show_abstracts = prefs.get("show_abstracts", True)
@@ -268,7 +275,7 @@ for pub in page_items:
                 "abstract": abstract,
             }
             log_audit("paper_selected", title[:50])
-            st.success("✅ Selected! Go to AI Assistant →")
+            st.switch_page("pages/2_AI_Assistant.py")
 
         if doi:
             st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
@@ -277,11 +284,11 @@ for pub in page_items:
 if total_pages > 1:
     c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
     with c1:
-        if st.button("⏮️", disabled=st.session_state.current_page == 1):
+        if st.button("⏮ First", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page = 1
             st.rerun()
     with c2:
-        if st.button("◀️", disabled=st.session_state.current_page == 1):
+        if st.button("◀ Prev", disabled=st.session_state.current_page == 1, use_container_width=True):
             st.session_state.current_page -= 1
             st.rerun()
     with c3:
@@ -290,11 +297,11 @@ if total_pages > 1:
             unsafe_allow_html=True,
         )
     with c4:
-        if st.button("▶️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Next ▶", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page += 1
             st.rerun()
     with c5:
-        if st.button("⏭️", disabled=st.session_state.current_page == total_pages):
+        if st.button("Last ⏭", disabled=st.session_state.current_page == total_pages, use_container_width=True):
             st.session_state.current_page = total_pages
             st.rerun()
 

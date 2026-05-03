@@ -8,14 +8,14 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import get_secret, get_nested_secret, is_db_configured
+import requests
+
+from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, DARK, LIGHT
-import requests
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
-
 apply_styles()
 
 colors = DARK if get_theme() == "dark" else LIGHT
@@ -38,6 +38,11 @@ if "user_preferences" not in st.session_state:
 
 st.markdown(hero_html("⚙️ Settings", "Customize your dashboard preferences and export publications"), unsafe_allow_html=True)
 
+# Load a small sample for the inline citation preview (cheap, cached by Streamlit)
+from utils.security import execute_query as _eq
+_preview_pubs, _ = _eq("SELECT * FROM publications ORDER BY citation_count DESC LIMIT 3")
+_preview_pubs = _preview_pubs or []
+
 # ── Display Preferences ─────────────────────────────────────────────────────
 st.markdown(section_title_html("Display Preferences"), unsafe_allow_html=True)
 
@@ -58,6 +63,10 @@ with col1:
         ),
         help="Default format for citation display and exports",
     )
+    if _preview_pubs:
+        with st.expander("📖 Citation Preview"):
+            for pub in _preview_pubs:
+                st.markdown(f"• {format_citation(pub, citation_style)}")
 
 with col2:
     show_abstracts = st.toggle(
@@ -122,7 +131,6 @@ with ecol2:
 if export_researcher != "All Researchers" and export_researcher in researcher_map:
     export_pubs = load_publications(orcid=researcher_map[export_researcher])
 else:
-    from utils.security import execute_query
     result, _ = execute_query("SELECT * FROM publications ORDER BY publication_year DESC")
     export_pubs = result or []
 
@@ -153,15 +161,8 @@ if export_pubs:
         file_name=fname,
         mime=mime,
         type="primary",
-        use_container_width=False,
+        use_container_width=True,
     )
-
-    # Citation preview
-    if export_pubs:
-        with st.expander("📖 Citation Preview (first 3 papers)"):
-            style = citation_style
-            for pub in export_pubs[:3]:
-                st.markdown(f"• {format_citation(pub, style)}")
 
 else:
     st.markdown(
@@ -174,11 +175,14 @@ else:
 # ── Connection Status ───────────────────────────────────────────────────────
 st.markdown(section_title_html("Connection Status"), unsafe_allow_html=True)
 
-try:
-    oa_resp = requests.get("https://api.openalex.org/works?per_page=1", timeout=5)
-    oa_ok = oa_resp.status_code == 200
-except Exception:
-    oa_ok = False
+
+@st.cache_data(ttl=120)
+def _openalex_status() -> bool:
+    try:
+        return requests.get("https://api.openalex.org/works?per_page=1", timeout=5).status_code == 200
+    except Exception:
+        return False
+
 
 def _conn_card(label, ok, ok_txt, fail_txt):
     c = colors["success"] if ok else colors["warning"]
@@ -189,6 +193,9 @@ def _conn_card(label, ok, ok_txt, fail_txt):
         f'<div style="font-size:0.78rem;color:{c}">{txt}</div>'
         f'</div>'
     )
+
+
+oa_ok = _openalex_status()
 
 cc1, cc2, cc3 = st.columns(3)
 cc1.markdown(_conn_card("Database",    is_db_configured(),                                          "Connected",  "Not configured"), unsafe_allow_html=True)

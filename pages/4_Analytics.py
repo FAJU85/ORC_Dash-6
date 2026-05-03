@@ -19,7 +19,6 @@ from utils.styles import (
 )
 
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
-
 apply_styles()
 
 colors = DARK if get_theme() == "dark" else LIGHT
@@ -59,18 +58,22 @@ if not pubs:
     st.stop()
 
 df = pd.DataFrame(pubs)
+
+# ── Numeric coercion (values from storage may arrive as strings) ─────────────
+if "citation_count" in df.columns:
+    df["citation_count"] = pd.to_numeric(df["citation_count"], errors="coerce").fillna(0)
+if "open_access" in df.columns:
+    df["open_access"] = df["open_access"].astype(str).str.lower().isin({"1", "true", "yes"})
+
 ccs = chart_colors()
 
 # ── Overview Metrics ────────────────────────────────────────────────────────
 st.markdown(section_title_html("Overview"), unsafe_allow_html=True)
 
-if 'citation_count' in df.columns:
-    citations = sorted(df['citation_count'].fillna(0).tolist(), reverse=True)
-else:
-    citations = []
+citations_sorted = sorted(df['citation_count'].tolist(), reverse=True) if 'citation_count' in df.columns else []
 
 h_index = 0
-for i, c in enumerate(citations, 1):
+for i, c in enumerate(citations_sorted, 1):
     if c >= i:
         h_index = i
     else:
@@ -145,7 +148,7 @@ with col1:
 
 with col2:
     if 'open_access' in df.columns:
-        oa  = int(df['open_access'].sum())
+        oa     = int(df['open_access'].sum())
         closed = len(df) - oa
         fig = px.pie(values=[oa, closed],
                      names=['Open Access', 'Subscription'],

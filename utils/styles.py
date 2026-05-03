@@ -381,25 +381,30 @@ def badge_html(text: str, kind: str = "year") -> str:
     return f'<span class="orc-badge orc-badge-{kind}">{text}</span>'
 
 
+def _esc(v) -> str:
+    from html import escape
+    return escape("" if v is None else str(v), quote=True)
+
+
 def pub_card_html(title: str, authors: list, journal: str, year,
                   citations: int, is_oa: bool, abstract: str = "") -> str:
     auth_html = ""
     if authors:
-        shown = ", ".join(str(a) for a in authors[:3] if a)
+        shown = ", ".join(_esc(a) for a in authors[:3] if a)
         if len(authors) > 3:
             shown += f" +{len(authors) - 3}"
         auth_html = f'<div class="orc-pub-meta">👥 {shown}</div>'
 
     badges = ""
     if year:
-        badges += badge_html(str(year), "year")
+        badges += badge_html(_esc(year), "year")
     badges += badge_html("Open Access", "oa") if is_oa else badge_html("Subscription", "closed")
     if citations:
         badges += badge_html(f"{citations:,} citations", "cite")
 
     abs_html = ""
     if abstract:
-        snippet = abstract[:220] + ("…" if len(abstract) > 220 else "")
+        snippet = _esc(abstract[:220]) + ("…" if len(abstract) > 220 else "")
         abs_html = (
             f'<div class="orc-pub-meta" style="margin-top:0.5rem;font-style:italic;opacity:0.65">'
             f'{snippet}</div>'
@@ -407,9 +412,9 @@ def pub_card_html(title: str, authors: list, journal: str, year,
 
     return (
         f'<div class="orc-pub">'
-        f'  <div class="orc-pub-title">{title}</div>'
+        f'  <div class="orc-pub-title">{_esc(title)}</div>'
         f'  {auth_html}'
-        f'  <div class="orc-pub-meta" style="margin-top:0.3rem">📰 {journal}</div>'
+        f'  <div class="orc-pub-meta" style="margin-top:0.3rem">📰 {_esc(journal)}</div>'
         f'  <div style="margin-top:0.45rem">{badges}</div>'
         f'  {abs_html}'
         f'</div>'
@@ -442,7 +447,7 @@ def footer_html(extra: str = "") -> str:
         f'  {extra_line}'
         f'  <p style="margin:0.2rem 0 0">Built by '
         f'    <a href="https://www.linkedin.com/in/fahad-al-jubalie-55973926/" '
-        f'       target="_blank" style="color:{c["accent"]};text-decoration:none;font-weight:500">'
+        f'       target="_blank" rel="noopener noreferrer" style="color:{c["accent"]};text-decoration:none;font-weight:500">'
         f'      Fahad Al-Jubalie</a>'
         f'  </p>'
         f'</div>'

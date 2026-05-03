@@ -1,13 +1,15 @@
 """
 ORC Research Dashboard - Main Application
+Secure, production-ready academic analytics platform
 """
 
 import streamlit as st
-import requests
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import requests
 
 from utils.security import (
     get_secret, get_nested_secret, execute_query,
@@ -79,11 +81,11 @@ if metrics and metrics[0].get("total_pubs", 0):
 
     c1, c2, c3, c4, c5 = st.columns(5)
     for col, icon, val, lbl in [
-        (c1, "📄", f"{total_pubs:,}",         "Publications"),
-        (c2, "📈", f"{total_cit:,}",           "Citations"),
-        (c3, "🎯", str(h_index),               "h-index"),
-        (c4, "📊", f"{avg_cit:.1f}",           "Avg Citations"),
-        (c5, "🔓", str(int(oa_count)),          "Open Access"),
+        (c1, "📄", f"{total_pubs:,}",    "Publications"),
+        (c2, "📈", f"{total_cit:,}",     "Citations"),
+        (c3, "🎯", str(h_index),         "h-index"),
+        (c4, "📊", f"{avg_cit:.1f}",     "Avg Citations"),
+        (c5, "🔓", str(int(oa_count)),   "Open Access"),
     ]:
         col.markdown(metric_card_html(icon, val, lbl), unsafe_allow_html=True)
 else:
@@ -99,9 +101,19 @@ else:
 # ── System Status ─────────────────────────────────────────────────────────────
 st.markdown(section_title_html("System Status"), unsafe_allow_html=True)
 
+
+@st.cache_data(ttl=120)
+def _openalex_status() -> bool:
+    try:
+        return requests.get("https://api.openalex.org/works?per_page=1", timeout=4).status_code == 200
+    except Exception:
+        return False
+
+
 def _dot(ok: bool) -> str:
     c = colors["success"] if ok else colors["warning"]
     return f'<span class="orc-dot" style="background:{c}"></span>'
+
 
 def _status_block(icon, label, ok, detail):
     dot = _dot(ok)
@@ -116,13 +128,10 @@ def _status_block(icon, label, ok, detail):
         f'</div>'
     )
 
+
 db_ok = is_db_configured()
 ai_ok = bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"))
-try:
-    r = requests.get("https://api.openalex.org/works?per_page=1", timeout=4)
-    oa_ok = r.status_code == 200
-except Exception:
-    oa_ok = False
+oa_ok = _openalex_status()
 
 c1, c2, c3 = st.columns(3)
 c1.markdown(_status_block("🗄️", "Data Storage",  db_ok, "Not configured"), unsafe_allow_html=True)

@@ -153,8 +153,15 @@ if not st.session_state.admin_authenticated:
         if st.session_state.get("otp_via_telegram"):
             st.success("✅ Verification code sent to your Telegram bot.")
         else:
-            st.warning("⚠️ Could not reach Telegram. Use the code below:")
-            st.info(f"🔐 **{st.session_state.otp_code}**")
+            _tg_configured = bool(
+                get_secret("TELEGRAM_RELAY_URL")
+                or (get_nested_secret("telegram", "bot_token") and get_nested_secret("telegram", "admin_chat_id"))
+            )
+            if _tg_configured:
+                st.error("❌ Could not reach Telegram. Check bot/relay configuration and try again.")
+            else:
+                st.warning("⚠️ Telegram not configured. Demo mode — code shown for testing only:")
+                st.info(f"🔐 **{st.session_state.otp_code}**")
 
         otp_key = f"otp_{st.session_state.login_email}"
         allowed, wait_time = rate_limiter.is_allowed(otp_key, max_attempts=5, window_seconds=300)

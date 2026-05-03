@@ -16,10 +16,15 @@ from utils.security import (
 )
 from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex
-from utils.ui import apply_theme, render_footer, render_empty_state
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    pub_card_html, footer_html, DARK, LIGHT
+)
 
 st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
-apply_theme()
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -29,7 +34,15 @@ rate_limiter = RateLimiter()
 # ============================================
 
 def sync_publications(orcid):
-    """Sync publications from OpenAlex for the given ORCID"""
+    """
+    Synchronize a researcher's publications from OpenAlex using their ORCID.
+    
+    Parameters:
+        orcid (str): ORCID identifier in the format `0000-0000-0000-0000`.
+    
+    Returns:
+        tuple: `(inserted_count, error_message)` where `inserted_count` is the number of publications added (0 on failure), and `error_message` is a string describing the failure or `None` on success. Possible error messages include an invalid ORCID format message and a rate-limit message indicating how many seconds to wait.
+    """
     if not validate_orcid(orcid):
         return 0, "Invalid ORCID format. Use: 0000-0000-0000-0000"
 
@@ -62,20 +75,19 @@ if "current_page" not in st.session_state:
 # PAGE
 # ============================================
 
-st.title("📚 Publications")
+st.markdown(hero_html("📚 Publications", "Browse, search, and export your research portfolio"), unsafe_allow_html=True)
 
 # ── Sync Section ────────────────────────────────────────────────────────────
-st.header("🔄 Sync Publications")
+st.markdown(section_title_html("Sync from OpenAlex"), unsafe_allow_html=True)
 
 if can_sync_publications():
     col1, col2 = st.columns([3, 1])
     with col1:
         default_orcid = get_nested_secret("researcher", "orcid", "")
-        orcid = st.text_input("ORCID ID", value=default_orcid, placeholder="0000-0000-0000-0000")
+        orcid = st.text_input("ORCID ID", value=default_orcid, placeholder="0000-0000-0000-0000", label_visibility="collapsed")
     with col2:
-        st.write("")
         if st.button("🔄 Sync Now", type="primary", use_container_width=True):
-            with st.spinner("Syncing publications..."):
+            with st.spinner("Syncing publications…"):
                 count, error = sync_publications(orcid)
             if error:
                 st.error(f"❌ {error}")
@@ -83,9 +95,12 @@ if can_sync_publications():
                 st.success(f"✅ Synced {count} new publications!")
                 st.rerun()
 else:
-    st.info("🔒 **Sync functionality is restricted to administrators only.**")
-
-st.divider()
+    st.markdown(
+        f'<div class="orc-card" style="border-left:4px solid {colors["warning"]};padding:0.75rem 1rem;">'
+        f'🔒 Sync is restricted to administrators only.'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Load all publications ───────────────────────────────────────────────────
 pubs, error = execute_query(
@@ -97,14 +112,18 @@ if error:
     st.stop()
 
 if not pubs:
-    render_empty_state(
-        "No publications yet",
-        "Use the Sync section above to import your publications.",
+    st.markdown(
+        f'<div class="orc-card" style="text-align:center;padding:2.5rem;">'
+        f'<div style="font-size:2.5rem;margin-bottom:0.75rem">📭</div>'
+        f'<div style="font-weight:600;font-size:1rem;margin-bottom:0.25rem">No publications yet</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use Sync Now to fetch publications from OpenAlex</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
     st.stop()
 
-# ── Researcher Filter ───────────────────────────────────────────────────────
-st.header("📄 Publication List")
+# ── Filters ─────────────────────────────────────────────────────────────────
+st.markdown(section_title_html("Publication List"), unsafe_allow_html=True)
 
 researchers = get_active_researchers()
 researcher_map = {r.get('name', r.get('orcid', '')): r.get('orcid') for r in researchers if r.get('orcid')}
@@ -112,7 +131,6 @@ researcher_map = {r.get('name', r.get('orcid', '')): r.get('orcid') for r in res
 filter_cols = st.columns([2, 2, 1, 1])
 
 with filter_cols[0]:
-    # Full-text search (title + abstract + journal + authors)
     search = st.text_input("🔍 Search", placeholder="Search title, abstract, journal, authors…")
 
 with filter_cols[1]:
@@ -129,15 +147,22 @@ with filter_cols[3]:
 # ── Apply Filters ───────────────────────────────────────────────────────────
 filtered = list(pubs)
 
-# Researcher filter
 if selected_researcher != "All Researchers" and selected_researcher in researcher_map:
     filter_orcid = researcher_map[selected_researcher]
     filtered = [p for p in filtered if p.get('orcid') == filter_orcid]
 
-# Full-text search across title, abstract, journal, and authors
 if search:
     q = sanitize_string(search, 100).lower()
     def _matches(p):
+        """
+        Check whether the current query string `q` appears in key text fields of a publication record.
+        
+        Parameters:
+            p (Mapping): A publication-like mapping with optional keys `"title"`, `"abstract"`, `"journal_name"`, and `"authors"`. `"authors"` may be a list of author strings.
+        
+        Returns:
+            bool: `True` if `q` is a substring of the title, abstract, journal name, or any author entry (case-insensitive); `False` otherwise.
+        """
         if q in (p.get("title") or "").lower():
             return True
         if q in (p.get("abstract") or "").lower():
@@ -150,11 +175,9 @@ if search:
         return False
     filtered = [p for p in filtered if _matches(p)]
 
-# Year filter
 if year_filter != "All":
     filtered = [p for p in filtered if str(p.get("publication_year")) == year_filter]
 
-# Sort
 if sort_opt == "Newest":
     filtered.sort(key=lambda x: x.get("publication_year") or 0, reverse=True)
 elif sort_opt == "Most Cited":
@@ -203,8 +226,6 @@ if filtered:
 
         st.caption(f"Exporting {len(filtered)} publication(s) currently shown.")
 
-st.divider()
-
 # ── Pagination ──────────────────────────────────────────────────────────────
 prefs = st.session_state.get("user_preferences", {})
 PER_PAGE = prefs.get("items_per_page", 10)
@@ -214,7 +235,18 @@ st.session_state.current_page = min(max(1, st.session_state.current_page), total
 start = (st.session_state.current_page - 1) * PER_PAGE
 page_items = filtered[start:start + PER_PAGE]
 
-st.markdown(f"**Showing {start + 1}–{min(start + PER_PAGE, len(filtered))} of {len(filtered)} publications**")
+if filtered:
+    st.markdown(
+        f'<p style="font-size:0.82rem;opacity:0.6;margin:0.5rem 0 0.75rem">'
+        f'Showing {start + 1}–{min(start + PER_PAGE, len(filtered))} of {len(filtered)} publications</p>',
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        f'<p style="font-size:0.82rem;color:{colors["text2"]};margin:0.5rem 0 0.75rem">'
+        f'No publications match the current filters</p>',
+        unsafe_allow_html=True,
+    )
 
 # ── Publication Cards ───────────────────────────────────────────────────────
 show_abstracts = prefs.get("show_abstracts", True)
@@ -234,22 +266,22 @@ for pub in page_items:
     col1, col2 = st.columns([5, 1])
 
     with col1:
-        st.markdown(f"**{title}**")
-        if authors:
-            auth_str = ", ".join(str(a) for a in authors[:3] if a)
-            if len(authors) > 3:
-                with st.expander(f"👥 {auth_str} +{len(authors) - 3} more"):
-                    st.write(", ".join(str(a) for a in authors if a))
-            else:
-                st.markdown(f"👥 {auth_str}")
-        oa_badge = " • 🔓 OA" if is_oa else ""
-        st.markdown(f"📰 **{journal}** • {year} • 📈 {citations} citations{oa_badge}")
-
-        if abstract and show_abstracts:
-            with st.expander("📝 Abstract"):
-                st.write(abstract[:500] + ("…" if len(abstract) > 500 else ""))
+        st.markdown(
+            pub_card_html(
+                title    = title[:160],
+                authors  = authors,
+                journal  = journal,
+                year     = year,
+                citations= citations,
+                is_oa    = bool(is_oa),
+                abstract = abstract if show_abstracts else "",
+            ),
+            unsafe_allow_html=True,
+        )
 
     with col2:
+        st.write("")
+        st.write("")
         pub_id = pub.get('id', title[:20])
         if st.button("🔬 Analyze", key=f"a_{pub_id}", use_container_width=True):
             st.session_state.selected_paper = {
@@ -266,8 +298,6 @@ for pub in page_items:
         if doi:
             st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
 
-    st.markdown("<div class='pub-card-wrap'></div>", unsafe_allow_html=True)
-
 # ── Pagination Controls ─────────────────────────────────────────────────────
 if total_pages > 1:
     c1, c2, c3, c4, c5 = st.columns([1, 1, 2, 1, 1])
@@ -281,7 +311,7 @@ if total_pages > 1:
             st.rerun()
     with c3:
         st.markdown(
-            f"<div style='text-align:center'>Page {st.session_state.current_page} / {total_pages}</div>",
+            f"<div style='text-align:center;font-size:0.85rem;opacity:0.7'>Page {st.session_state.current_page} / {total_pages}</div>",
             unsafe_allow_html=True,
         )
     with c4:
@@ -293,9 +323,11 @@ if total_pages > 1:
             st.session_state.current_page = total_pages
             st.rerun()
 
-render_footer()
-
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 if st.session_state.get("selected_paper"):
     st.sidebar.success(f"📄 Selected: {st.session_state.selected_paper['title'][:30]}…")
     st.sidebar.info("Go to **AI Assistant** to analyze")
+
+# ── Footer ───────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(footer_html(), unsafe_allow_html=True)

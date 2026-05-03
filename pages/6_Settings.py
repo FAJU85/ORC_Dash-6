@@ -8,13 +8,17 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import get_nested_secret
+import requests
+
+from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-from utils.ui import apply_theme, render_system_status, render_footer
+from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, DARK, LIGHT
 
 st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
-apply_theme()
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 # ============================================
 # SESSION STATE
@@ -32,9 +36,7 @@ if "user_preferences" not in st.session_state:
 # PAGE
 # ============================================
 
-st.title("⚙️ Settings")
-st.markdown("Customize your dashboard experience")
-st.divider()
+st.markdown(hero_html("⚙️ Settings", "Customize your dashboard preferences and export publications"), unsafe_allow_html=True)
 
 # Load a small sample for the inline citation preview (cheap, cached by Streamlit)
 from utils.security import execute_query as _eq
@@ -42,7 +44,7 @@ _preview_pubs, _ = _eq("SELECT * FROM publications ORDER BY citation_count DESC 
 _preview_pubs = _preview_pubs or []
 
 # ── Display Preferences ─────────────────────────────────────────────────────
-st.header("🎨 Display Preferences")
+st.markdown(section_title_html("Display Preferences"), unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
@@ -100,10 +102,9 @@ with sc2:
         st.success("✅ Reset to defaults!")
         st.rerun()
 
-st.divider()
 
 # ── Export ──────────────────────────────────────────────────────────────────
-st.header("📥 Export Publications")
+st.markdown(section_title_html("Export Publications"), unsafe_allow_html=True)
 
 researchers = get_active_researchers()
 researcher_map = {r.get('name', r.get('orcid', '')): r.get('orcid') for r in researchers if r.get('orcid')}
@@ -130,11 +131,14 @@ with ecol2:
 if export_researcher != "All Researchers" and export_researcher in researcher_map:
     export_pubs = load_publications(orcid=researcher_map[export_researcher])
 else:
-    from utils.security import execute_query
     result, _ = execute_query("SELECT * FROM publications ORDER BY publication_year DESC")
     export_pubs = result or []
 
-st.markdown(f"**{len(export_pubs)} publication(s)** ready for export.")
+st.markdown(
+    f'<p style="font-size:0.82rem;color:{colors["text2"]};margin:0.25rem 0 0.75rem">'
+    f'{len(export_pubs)} publication(s) ready for export.</p>',
+    unsafe_allow_html=True,
+)
 
 if export_pubs:
     if export_format == "CSV":
@@ -161,34 +165,74 @@ if export_pubs:
     )
 
 else:
-    st.info("No publications found. Sync publications from the Publications page first.")
-
-st.divider()
+    st.markdown(
+        f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">No publications found. Sync from the <strong>Publications</strong> page first.</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Connection Status ───────────────────────────────────────────────────────
-st.header("🔌 Connection Status")
+st.markdown(section_title_html("Connection Status"), unsafe_allow_html=True)
 
-render_system_status()
 
-st.divider()
+@st.cache_data(ttl=120)
+def _openalex_status() -> bool:
+    try:
+        return requests.get("https://api.openalex.org/works?per_page=1", timeout=5).status_code == 200
+    except Exception:
+        return False
+
+
+def _conn_card(label, ok, ok_txt, fail_txt):
+    """
+    Builds an HTML status card for a connection check.
+    
+    Parameters:
+        label (str): Title displayed on the card.
+        ok (bool): Health flag; selects the success or warning style and message.
+        ok_txt (str): Message displayed when `ok` is True.
+        fail_txt (str): Message displayed when `ok` is False.
+    
+    Returns:
+        html (str): An HTML fragment representing a themed status card containing the label and the selected message colored according to status.
+    """
+    c = colors["success"] if ok else colors["warning"]
+    txt = ok_txt if ok else fail_txt
+    return (
+        f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+        f'<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.2rem">{label}</div>'
+        f'<div style="font-size:0.78rem;color:{c}">{txt}</div>'
+        f'</div>'
+    )
+
+
+oa_ok = _openalex_status()
+
+cc1, cc2, cc3 = st.columns(3)
+cc1.markdown(_conn_card("Database",    is_db_configured(),                                          "Connected",  "Not configured"), unsafe_allow_html=True)
+cc2.markdown(_conn_card("AI Service",  bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")), "Available", "Not configured"), unsafe_allow_html=True)
+cc3.markdown(_conn_card("OpenAlex",    oa_ok,                                                        "Online",    "Unavailable"),    unsafe_allow_html=True)
 
 # ── About ───────────────────────────────────────────────────────────────────
-st.header("ℹ️ About")
-st.markdown("""
-**ORC Research Dashboard** v1.0
+st.markdown(section_title_html("About"), unsafe_allow_html=True)
+st.markdown(
+    f'<div class="orc-card" style="padding:1rem 1.5rem">'
+    f'<div style="font-weight:700;font-size:0.95rem;margin-bottom:0.5rem">ORC Research Dashboard · v1.0</div>'
+    f'<div style="font-size:0.83rem;color:{colors["text2"]};line-height:1.75">'
+    f'📚 Publication tracking via OpenAlex<br>'
+    f'🔬 AI-powered research assistant<br>'
+    f'📊 Interactive analytics &amp; visualizations<br>'
+    f'📥 Export to CSV, BibTeX, JSON<br>'
+    f'🔐 Secure admin panel with two-factor authentication'
+    f'</div>'
+    f'<div style="margin-top:0.75rem;font-size:0.8rem;color:{colors["muted"]}">'
+    f'Need help? <a href="/Bug_Report" style="color:{colors["accent"]};text-decoration:none">Report a bug</a>'
+    f'</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
-An AI-powered academic research analytics platform.
-
-**Features:**
-- 📚 Publication tracking and management
-- 🔬 AI-powered research assistant
-- 📊 Interactive analytics & visualizations
-- 📥 Export to CSV, BibTeX, JSON
-- 🔐 Secure admin panel with two-factor authentication
-
-**Need help?**
-- 🐛 [Report a Bug](/Bug_Report)
-- 🔐 [Admin Panel](/Admin) (administrators only)
-""")
-
-render_footer()
+# ── Footer ───────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(footer_html(), unsafe_allow_html=True)

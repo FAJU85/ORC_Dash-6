@@ -6,19 +6,25 @@ import json
 import streamlit as st
 import sys
 import os
+from html import escape
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic import ValidationError
 from utils.security import get_secret, sanitize_string, log_audit, log_error, RateLimiter
-from utils.ui import apply_theme, render_footer
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    footer_html, DARK, LIGHT
+)
 from utils.ai_schemas import (
     AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
     PaperSummary, KeyFindings, Methodology, Implications,
 )
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
-apply_theme()
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 rate_limiter = RateLimiter()
 
@@ -54,11 +60,8 @@ def _paper_system_block(ctx: PaperContext) -> str:
     )
 
 
-# ── Option B: validated chat response ────────────────────────────────────────
-
 def get_ai_response(message: str, paper: dict | None = None):
     """Validate input with AIRequest, call Groq, return (text, error)."""
-    # Input validation
     try:
         req = AIRequest(message=message)
     except ValidationError as e:
@@ -104,8 +107,6 @@ def get_ai_response(message: str, paper: dict | None = None):
         return None, "AI service temporarily unavailable"
 
 
-# ── Option A: structured quick-action response ────────────────────────────────
-
 def get_structured_response(action: str, paper: dict):
     """Call Groq in JSON mode and validate result with the action's Pydantic schema."""
     session_id = st.session_state.get("session_token", "default")
@@ -149,7 +150,6 @@ def get_structured_response(action: str, paper: dict):
         if validated:
             log_audit("ai_structured_request", action)
             return validated, raw, None
-        # Pydantic validation failed — fall back to raw text
         log_error("ai_schema_validation_failed", f"action={action}", page="AI Assistant")
         return None, raw, None
     except Exception as e:
@@ -157,8 +157,6 @@ def get_structured_response(action: str, paper: dict):
         log_error("ai_service_error", str(e), page="AI Assistant")
         return None, None, "AI service temporarily unavailable"
 
-
-# ── Structured response renderers ─────────────────────────────────────────────
 
 def _bullet(items: list[str]):
     for item in items:
@@ -222,7 +220,6 @@ def render_structured(result):
 for key, val in [
     ("chat_history", []),
     ("pending_action", None),
-    ("pending", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -231,42 +228,64 @@ for key, val in [
 # PAGE
 # ============================================
 
-st.title("🔬 AI Research Assistant")
+st.markdown(hero_html("🔬 AI Research Assistant", "Analyze papers, extract insights, and explore your research"), unsafe_allow_html=True)
 
 api_key = (
     get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
     or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
 )
 if not api_key:
-    st.error("❌ AI service not configured")
-    st.info("Contact administrator to enable AI features.")
+    st.markdown(
+        f'<div class="orc-card" style="border-left:4px solid {colors["error"]};padding:1.25rem 1.5rem;">'
+        f'<div style="font-weight:600;font-size:0.95rem;margin-bottom:0.3rem">❌ AI Service Not Configured</div>'
+        f'<div style="font-size:0.85rem;opacity:0.7">Contact the administrator to enable AI features.</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+    st.markdown(footer_html(), unsafe_allow_html=True)
     st.stop()
 
-st.divider()
+# ── Selected Paper Card ─────────────────────────────────────────────────────
+st.markdown(section_title_html("Selected Paper"), unsafe_allow_html=True)
 
-# ── Selected Paper ────────────────────────────────────────────────────────────
 paper = st.session_state.get("selected_paper")
 
-st.header("📄 Selected Paper")
 if paper:
-    st.markdown(f"**{paper.get('title', 'Unknown')}**")
-    st.caption(
-        f"📰 {paper.get('journal_name', '')}  •  "
-        f"{paper.get('publication_year', '')}  •  "
-        f"{paper.get('citation_count', 0)} citations"
-    )
-    if st.button("❌ Clear Selection"):
-        st.session_state.selected_paper = None
-        log_audit("paper_deselected")
-        st.rerun()
+    citations = paper.get('citation_count', 0) or 0
+    year = paper.get('publication_year', '')
+    journal = paper.get('journal_name', '')
+    safe_title = escape(str(paper.get("title", "Unknown")), quote=True)
+    safe_journal = escape(str(journal), quote=True)
+    c1, c2 = st.columns([5, 1])
+    with c1:
+        st.markdown(
+            f'<div class="orc-card" style="border-left:4px solid {colors["accent"]};padding:1rem 1.25rem;">'
+            f'  <div style="font-weight:600;font-size:0.95rem;margin-bottom:0.4rem">{safe_title}</div>'
+            f'  <div style="font-size:0.8rem;color:{colors["text2"]}">📰 {safe_journal}</div>'
+            f'  <div style="font-size:0.78rem;color:{colors["muted"]};margin-top:0.2rem">{year} · {citations:,} citations</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.write("")
+        st.write("")
+        if st.button("✕ Clear", use_container_width=True):
+            st.session_state.selected_paper = None
+            log_audit("paper_deselected")
+            st.rerun()
 else:
-    st.info("💡 Select a paper from the **Publications** page for detailed analysis.")
+    st.markdown(
+        f'<div class="orc-card" style="text-align:center;padding:1.5rem;border:1px dashed {colors["border"]};">'
+        f'<div style="font-size:1.75rem;margin-bottom:0.4rem">📄</div>'
+        f'<div style="font-weight:600;font-size:0.9rem;margin-bottom:0.2rem">No paper selected</div>'
+        f'<div style="font-size:0.8rem;color:{colors["text2"]}">Go to <strong>Publications</strong> and click Analyze on any paper</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-st.divider()
-
-# ── Quick Actions (structured / Option A) ────────────────────────────────────
-st.header("⚡ Quick Actions")
-st.caption("Returns validated structured cards instead of raw text.")
+# ── Quick Actions ───────────────────────────────────────────────────────────
+st.markdown(section_title_html("Quick Actions"), unsafe_allow_html=True)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -302,19 +321,14 @@ if st.session_state.pending_action and paper:
     elif validated:
         render_structured(validated)
     elif raw:
-        # Schema validation failed — show raw text as fallback
         st.info(raw)
     st.divider()
 
-st.divider()
+# ── Chat Interface ──────────────────────────────────────────────────────────
+st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
 
-# ── Chat Interface (validated / Option B) ────────────────────────────────────
 chat_col, clear_col = st.columns([5, 1])
-with chat_col:
-    st.header("💬 Chat")
 with clear_col:
-    st.write("")
-    st.write("")
     if st.session_state.chat_history:
         if st.button("🗑️ Clear", use_container_width=True):
             st.session_state.chat_history = []
@@ -325,11 +339,9 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# Chat input — validated by AIRequest before reaching the AI
 user_input = st.chat_input("Ask about your research papers…")
 
 if user_input:
-    # Option B: validate input before anything else
     try:
         req = AIRequest(message=user_input)
     except ValidationError as e:
@@ -350,4 +362,6 @@ if user_input:
             st.session_state.chat_history.append({"role": "assistant", "content": f"⚠️ {error}"})
     st.rerun()
 
-render_footer(note="Select a paper from Publications for context-aware analysis.")
+# ── Footer ───────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(footer_html("Select a paper from Publications for context-aware analysis."), unsafe_allow_html=True)

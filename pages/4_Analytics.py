@@ -13,12 +13,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import execute_query
 from utils.hf_data import get_active_researchers, load_publications
-from utils.ui import apply_theme, get_chart_theme, render_footer, render_empty_state
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    metric_card_html, footer_html, chart_layout, chart_colors, DARK, LIGHT
+)
 
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
-apply_theme()
+apply_styles()
 
-st.title("📈 Analytics")
+colors = DARK if get_theme() == "dark" else LIGHT
+
+st.markdown(hero_html("📈 Analytics", "Interactive research metrics and publication visualizations"), unsafe_allow_html=True)
 
 # ── Researcher Filter ───────────────────────────────────────────────────────
 researchers = get_active_researchers()
@@ -28,6 +33,7 @@ if researcher_map:
     selected_researcher = st.selectbox(
         "👤 Researcher",
         ["All Researchers"] + list(researcher_map.keys()),
+        label_visibility="collapsed",
     )
 else:
     selected_researcher = "All Researchers"
@@ -41,123 +47,126 @@ else:
     pubs = pubs or []
 
 if not pubs:
-    render_empty_state(
-        "No publications to visualise",
-        "Sync publications first to see charts and analytics.",
-        cta_label="Go to Publications →",
-        cta_page="pages/1_Publications.py",
+    st.markdown(
+        f'<div class="orc-card" style="text-align:center;padding:2.5rem;">'
+        f'<div style="font-size:2.5rem;margin-bottom:0.75rem">📭</div>'
+        f'<div style="font-weight:600;font-size:1rem;margin-bottom:0.25rem">No data available</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Sync publications from the <strong>Publications</strong> page first</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
     st.stop()
 
 df = pd.DataFrame(pubs)
 
-# ── Overview Metrics ────────────────────────────────────────────────────────
-st.header("📊 Overview")
+# ── Numeric coercion (values from storage may arrive as strings) ─────────────
+if "citation_count" in df.columns:
+    df["citation_count"] = pd.to_numeric(df["citation_count"], errors="coerce").fillna(0)
+if "open_access" in df.columns:
+    df["open_access"] = df["open_access"].astype(str).str.lower().isin({"1", "true", "yes"})
 
-if 'citation_count' in df.columns:
-    citations = sorted(df['citation_count'].fillna(0).tolist(), reverse=True)
-else:
-    citations = []
+ccs = chart_colors()
+
+# ── Overview Metrics ────────────────────────────────────────────────────────
+st.markdown(section_title_html("Overview"), unsafe_allow_html=True)
+
+citations_sorted = sorted(df['citation_count'].tolist(), reverse=True) if 'citation_count' in df.columns else []
 
 h_index = 0
-for i, c in enumerate(citations, 1):
+for i, c in enumerate(citations_sorted, 1):
     if c >= i:
         h_index = i
     else:
         break
 
-c1, c2, c3, c4, c5 = st.columns(5)
-with c1:
-    st.metric("Publications", len(df))
-with c2:
-    total_cit = df['citation_count'].sum() if 'citation_count' in df else 0
-    st.metric("Total Citations", f"{total_cit:,.0f}")
-with c3:
-    st.metric("h-index", h_index)
-with c4:
-    avg_cit = df['citation_count'].mean() if 'citation_count' in df else 0
-    st.metric("Avg Citations", f"{avg_cit:.1f}")
-with c5:
-    oa_count = int(df['open_access'].sum()) if 'open_access' in df else 0
-    st.metric("Open Access", oa_count)
+total_cit = df['citation_count'].sum() if 'citation_count' in df.columns else 0
+avg_cit   = df['citation_count'].mean() if 'citation_count' in df.columns else 0
+oa_count  = int(df['open_access'].sum()) if 'open_access' in df.columns else 0
 
-st.divider()
+mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+for col, icon, val, lbl in [
+    (mc1, "📄", f"{len(df):,}",       "Publications"),
+    (mc2, "📈", f"{total_cit:,.0f}",  "Citations"),
+    (mc3, "🎯", str(h_index),          "h-index"),
+    (mc4, "📊", f"{avg_cit:.1f}",     "Avg Citations"),
+    (mc5, "🔓", str(oa_count),         "Open Access"),
+]:
+    col.markdown(metric_card_html(icon, val, lbl), unsafe_allow_html=True)
 
 # ── Year Charts ─────────────────────────────────────────────────────────────
+st.markdown(section_title_html("Publication Trends"), unsafe_allow_html=True)
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📅 Publications by Year")
     if 'publication_year' in df.columns:
         year_counts = df.groupby('publication_year').size().reset_index(name='count')
         year_counts = year_counts.sort_values('publication_year')
         fig = px.bar(year_counts, x='publication_year', y='count',
                      labels={'publication_year': 'Year', 'count': 'Publications'},
-                     color_discrete_sequence=['#06b6d4'])
-        fig.update_layout(showlegend=False, **get_chart_theme())
+                     color_discrete_sequence=[ccs[0]])
+        fig.update_layout(**chart_layout("Publications by Year"))
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.subheader("📈 Citations by Year")
     if 'publication_year' in df.columns and 'citation_count' in df.columns:
         year_cit = df.groupby('publication_year')['citation_count'].sum().reset_index()
         year_cit = year_cit.sort_values('publication_year')
         fig = px.line(year_cit, x='publication_year', y='citation_count',
                       labels={'publication_year': 'Year', 'citation_count': 'Citations'},
-                      markers=True)
-        fig.update_traces(line_color='#8b5cf6')
-        fig.update_layout(**get_chart_theme())
+                      markers=True, color_discrete_sequence=[ccs[1]])
+        fig.update_layout(**chart_layout("Citations by Year"))
         st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
-
 # ── Top Papers ──────────────────────────────────────────────────────────────
-st.subheader("🏆 Most Cited Papers")
+st.markdown(section_title_html("Most Cited Papers"), unsafe_allow_html=True)
 if 'citation_count' in df.columns:
-    top = df.nlargest(10, 'citation_count')[['title', 'journal_name', 'publication_year', 'citation_count']]
-    top['title_short'] = top['title'].str[:50] + '…'
+    top = df.nlargest(10, 'citation_count')[['title', 'journal_name', 'publication_year', 'citation_count']].copy()
+    top['title_short'] = top['title'].str[:55] + '…'
     fig = px.bar(top, y='title_short', x='citation_count', orientation='h',
                  labels={'title_short': '', 'citation_count': 'Citations'},
-                 color_discrete_sequence=['#22c55e'])
-    fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400,
-                      **get_chart_theme())
+                 color_discrete_sequence=[ccs[2]])
+    layout = chart_layout()
+    layout['yaxis'] = {**layout.get('yaxis', {}), 'categoryorder': 'total ascending'}
+    layout['height'] = 380
+    fig.update_layout(**layout)
     st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
-
 # ── Journal & Open Access ───────────────────────────────────────────────────
+st.markdown(section_title_html("Distribution"), unsafe_allow_html=True)
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📰 Top Journals")
     if 'journal_name' in df.columns:
         jcounts = df['journal_name'].value_counts().head(8).reset_index()
         jcounts.columns = ['journal', 'count']
         fig = px.pie(jcounts, values='count', names='journal',
-                     color_discrete_sequence=px.colors.qualitative.Set3)
-        fig.update_layout(**get_chart_theme())
+                     color_discrete_sequence=ccs,
+                     hole=0.35)
+        fig.update_layout(**chart_layout("Top Journals"))
+        fig.update_traces(textfont_color=colors["text"])
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.subheader("🔓 Open Access Distribution")
     if 'open_access' in df.columns:
-        oa = int(df['open_access'].sum())
+        oa     = int(df['open_access'].sum())
         closed = len(df) - oa
         fig = px.pie(values=[oa, closed],
                      names=['Open Access', 'Subscription'],
-                     color_discrete_sequence=['#22c55e', '#64748b'])
-        fig.update_layout(**get_chart_theme())
+                     color_discrete_sequence=[colors["success"], colors["muted"]],
+                     hole=0.35)
+        fig.update_layout(**chart_layout("Open Access Distribution"))
+        fig.update_traces(textfont_color=colors["text"])
         st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
-
 # ── Citation Distribution ───────────────────────────────────────────────────
-st.subheader("📊 Citation Distribution")
+st.markdown(section_title_html("Citation Distribution"), unsafe_allow_html=True)
 if 'citation_count' in df.columns:
     fig = px.histogram(df, x='citation_count', nbins=20,
                        labels={'citation_count': 'Citations', 'count': 'Papers'},
-                       color_discrete_sequence=['#f59e0b'])
-    fig.update_layout(**get_chart_theme())
+                       color_discrete_sequence=[ccs[3]])
+    fig.update_layout(**chart_layout())
     st.plotly_chart(fig, use_container_width=True)
 
-render_footer()
+# ── Footer ───────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(footer_html(), unsafe_allow_html=True)

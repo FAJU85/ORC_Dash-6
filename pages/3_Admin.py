@@ -24,10 +24,15 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log, flush_error_log
 )
-from utils.ui import apply_theme, render_system_status, render_footer
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    footer_html, DARK, LIGHT
+)
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
-apply_theme()
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 rate_limiter = RateLimiter()
 
@@ -50,7 +55,7 @@ for key, default in [
 # PAGE
 # ============================================
 
-st.title("🔐 Administrator Panel")
+st.markdown(hero_html("🔐 Administrator Panel", "Secure system management & audit console"), unsafe_allow_html=True)
 
 # Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
 admin_email    = (get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email",    "")).lower().strip()
@@ -62,21 +67,12 @@ if admin_password and not admin_hash:
     admin_hash = hash_password(admin_password)
 
 if not admin_email or not admin_hash:
-    st.error("⚠️ Administrator account not configured")
-
-    email_ok = bool(admin_email)
-    pass_ok  = bool(admin_hash)
-
-    st.markdown("#### Secret status")
     st.markdown(
-        f"{'✅' if email_ok else '❌'} `ADMIN_EMAIL` — {'set' if email_ok else '**missing**'}\n\n"
-        f"{'✅' if pass_ok else '❌'} `ADMIN_PASSWORD` — {'set' if pass_ok else '**missing**'}"
-    )
-
-    st.info(
-        "Add both secrets at:\n\n"
-        "**https://huggingface.co/spaces/vooom/orc_dash_1/settings**\n\n"
-        "Then restart the Space (Settings → Factory reboot)."
+        f'<div class="orc-card" style="border-left:3px solid {colors["warning"]};max-width:640px">'
+        f'<div style="font-weight:600;font-size:0.95rem;margin-bottom:0.5rem">⚠️ Administrator account not configured</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Add <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> (or <code>admin.password_hash</code>) to your secrets. See <code>SECRETS_TEMPLATE.toml</code> for instructions.</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
     st.stop()
 
@@ -90,7 +86,7 @@ if not st.session_state.admin_authenticated:
 
     if not st.session_state.otp_sent:
         # ── Step 1: Email + Password ─────────────────────────────────────
-        st.header("🔑 Administrator Login")
+        st.markdown(section_title_html("Administrator Login"), unsafe_allow_html=True)
 
         allowed, wait_time = rate_limiter.is_allowed(client_key, max_attempts=5, window_seconds=300)
         if not allowed:
@@ -135,20 +131,25 @@ if not st.session_state.admin_authenticated:
                 with st.spinner("Sending verification code to Telegram…"):
                     t.join(timeout=10)
 
-                st.session_state.otp_sent               = True
-                st.session_state.otp_via_telegram        = tg_result["ok"]
+                st.session_state.otp_sent         = True
+                st.session_state.otp_via_telegram = tg_result["ok"]
                 if tg_result["ok"]:
                     log_audit("otp_telegram_sent", email[:20])
                 else:
                     log_audit("otp_fallback_screen", email[:20])
                 st.rerun()
 
-        st.divider()
-        st.caption("🔒 Two-factor authentication required · A verification code will be sent to your Telegram")
+        st.markdown(
+            f'<div style="text-align:center;color:{colors["muted"]};font-size:0.82rem;margin-top:1rem">'
+            f'🔒 Two-factor authentication required · A verification code will be sent to your Telegram'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
-        st.header("📱 Enter Verification Code")
+        st.markdown(section_title_html("Verification Code"), unsafe_allow_html=True)
+
         if st.session_state.get("otp_via_telegram"):
             st.success("✅ Verification code sent to your Telegram bot.")
         else:
@@ -207,27 +208,55 @@ else:
     # ADMIN DASHBOARD
     # ============================================
 
-    header_col, logout_col = st.columns([5, 1])
-    with header_col:
-        st.success("✅ Logged in as Administrator")
-    with logout_col:
-        st.write("")
-        if st.button("🚪 Logout", use_container_width=True):
+    top_c1, top_c2 = st.columns([5, 1])
+    with top_c1:
+        st.markdown(
+            f'<div style="font-size:0.85rem;color:{colors["success"]};font-weight:500">✓ Authenticated as Administrator</div>',
+            unsafe_allow_html=True,
+        )
+    with top_c2:
+        if st.button("Logout", use_container_width=True):
             admin_logout()
             st.rerun()
 
     st.divider()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Dashboard", "👥 Researchers", "⚙️ Settings", "📋 Audit Log", "🚨 Error Log"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Dashboard", "Researchers", "Settings", "Audit Log", "Error Log"])
 
     # ── Tab 1: Dashboard ───────────────────────────────────────────────────
     with tab1:
-        st.header("System Overview")
+        st.markdown(section_title_html("Service Status"), unsafe_allow_html=True)
 
-        render_system_status(show_email=True, show_telegram=True)
+        def _svc(label, ok, ok_txt, warn_txt, is_info=False):
+            """
+            Render an HTML status card for a service with a color-coded message.
+            
+            Parameters:
+                label (str): Visible title for the status card.
+                ok (bool): Whether the service is considered healthy; controls color and message choice.
+                ok_txt (str): Message shown when `ok` is True.
+                warn_txt (str): Message shown when `ok` is False.
+                is_info (bool, optional): If True and `ok` is False, use a muted/info color instead of a warning color. Defaults to False.
+            
+            Returns:
+                str: An HTML string for a compact, styled status card suitable for embedding in the dashboard.
+            """
+            c = colors["success"] if ok else (colors["muted"] if is_info else colors["warning"])
+            txt = ok_txt if ok else warn_txt
+            return (
+                f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+                f'  <div style="font-weight:600;font-size:0.85rem;margin-bottom:0.2rem">{label}</div>'
+                f'  <div style="font-size:0.78rem;color:{c}">{txt}</div>'
+                f'</div>'
+            )
 
-        st.divider()
-        st.header("📊 Statistics")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.markdown(_svc("Database",      is_db_configured(),                                          "Connected",  "Not configured"),  unsafe_allow_html=True)
+        c2.markdown(_svc("AI Service",    bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")), "Configured", "Not set"),         unsafe_allow_html=True)
+        c3.markdown(_svc("Email (SMTP)",  bool(get_nested_secret("smtp", "user")),                      "Configured", "Demo mode"),        unsafe_allow_html=True)
+        c4.markdown(_svc("Telegram",      bool(get_nested_secret("telegram", "bot_token")),             "Configured", "Optional", True),   unsafe_allow_html=True)
+
+        st.markdown(section_title_html("Statistics"), unsafe_allow_html=True)
 
         stats, _ = execute_query("""
             SELECT COUNT(*) as count,
@@ -247,8 +276,7 @@ else:
 
     # ── Tab 2: Researchers ─────────────────────────────────────────────────
     with tab2:
-        st.header("👥 Manage Researchers")
-        st.subheader("➕ Add New Researcher")
+        st.markdown(section_title_html("Add Researcher"), unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -260,7 +288,6 @@ else:
 
         if st.button("Add Researcher", type="primary"):
             if new_orcid:
-                # Normalize: strip full URL prefix if pasted
                 orcid_clean = new_orcid.strip()
                 for prefix in ("https://orcid.org/", "http://orcid.org/"):
                     if orcid_clean.startswith(prefix):
@@ -281,12 +308,10 @@ else:
             else:
                 st.warning("Please enter an ORCID")
 
-        st.divider()
-        st.subheader("📋 Current Researchers")
+        st.markdown(section_title_html("Current Researchers"), unsafe_allow_html=True)
 
         researchers = get_active_researchers()
         if researchers:
-            # Header row
             hc1, hc2, hc3, hc4, hc5 = st.columns([3, 2, 1, 1, 1])
             with hc1:
                 st.caption("**Researcher**")
@@ -336,20 +361,18 @@ else:
 
     # ── Tab 3: Settings ────────────────────────────────────────────────────
     with tab3:
-        st.header("System Settings")
-
-        st.subheader("AI Configuration")
-        ai_configured = bool(
-            get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
-            or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
+        st.markdown(section_title_html("AI Configuration"), unsafe_allow_html=True)
+        current_model = get_secret("AI_MODEL") or "llama-3.3-70b-versatile"
+        st.markdown(
+            f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+            f'<div style="font-size:0.8rem;color:{colors["text2"]}">Active model</div>'
+            f'<div style="font-weight:600;font-family:monospace;font-size:0.9rem;margin-top:0.2rem">{current_model}</div>'
+            f'<div style="font-size:0.78rem;color:{colors["muted"]};margin-top:0.25rem">Set <code>AI_MODEL</code> in your secrets to override.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
-        if ai_configured:
-            st.success("✅ AI assistant is configured and ready.")
-        else:
-            st.warning("⚠️ AI service key not set. Update your environment secrets to enable it.")
 
-        st.divider()
-        st.subheader("Telegram Notifications")
+        st.markdown(section_title_html("Telegram Notifications"), unsafe_allow_html=True)
         relay_url    = get_secret("TELEGRAM_RELAY_URL")
         relay_secret = get_secret("TELEGRAM_RELAY_SECRET")
         tg_token     = get_nested_secret("telegram", "bot_token", "")
@@ -364,16 +387,17 @@ else:
         st.markdown(f"**Relay secret:** {'✅ set' if relay_secret else '❌ missing'}")
 
         if relay_url and st.button("📨 Send Test OTP via Telegram", key="test_tg_relay"):
-            import json, urllib.request
+            import json as _json
+            import urllib.request
             try:
-                payload = json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
-                req = urllib.request.Request(
+                payload = _json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
+                req_obj = urllib.request.Request(
                     relay_url, data=payload, method="POST",
                     headers={"Content-Type": "application/json"},
                 )
-                with urllib.request.urlopen(req, timeout=15) as r:
+                with urllib.request.urlopen(req_obj, timeout=15) as r:
                     body = r.read().decode()
-                result = json.loads(body)
+                result = _json.loads(body)
                 if result.get("ok"):
                     st.success("✅ Test message delivered! Check your Telegram.")
                 else:
@@ -381,30 +405,31 @@ else:
             except Exception as e:
                 st.error(f"❌ {type(e).__name__}: {e}")
 
+        st.markdown(section_title_html("Maintenance"), unsafe_allow_html=True)
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            if st.button("🗑️ Clear Application Cache", use_container_width=True):
+                st.cache_data.clear()
+                log_audit("cache_cleared")
+                st.success("✅ Cache cleared!")
+        with mc2:
+            if st.button("💾 Flush Audit Log to Storage", use_container_width=True):
+                flush_audit_log()
+                st.success("✅ Audit log flushed!")
 
-        st.divider()
-        st.subheader("Cache Management")
-        if st.button("🗑️ Clear Application Cache"):
-            st.cache_data.clear()
-            log_audit("cache_cleared")
-            st.success("✅ Cache cleared!")
-
-        if st.button("💾 Flush Audit Log to Storage"):
-            flush_audit_log()
-            st.success("✅ Audit log flushed!")
-
-        st.divider()
-        st.subheader("Security")
-        st.info(f"**Admin Email:** {admin_email}")
-        st.info(
-            "To change admin credentials, update the `[admin]` section in your "
-            "environment secrets."
+        st.markdown(section_title_html("Security"), unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+            f'<div style="font-size:0.8rem;color:{colors["text2"]}">Admin email</div>'
+            f'<div style="font-weight:600;font-size:0.9rem;margin-top:0.2rem">{admin_email}</div>'
+            f'<div style="font-size:0.78rem;color:{colors["muted"]};margin-top:0.25rem">Update credentials via the <code>[admin]</code> section in your secrets.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
 
     # ── Tab 4: Audit Log ───────────────────────────────────────────────────
     with tab4:
-        st.header("Security Audit Log")
-        st.markdown("*Recent security-relevant events*")
+        st.markdown(section_title_html("Security Audit Log"), unsafe_allow_html=True)
 
         col_load, _ = st.columns([1, 3])
         with col_load:
@@ -414,7 +439,6 @@ else:
 
         audit_log = get_audit_log()
         if audit_log:
-            # Classify actions so security failures stand out visually
             _DANGER  = {"login_wrong_email", "login_wrong_password", "login_rate_limited",
                         "otp_wrong_code", "otp_expired", "otp_rate_limited", "otp_invalid_format"}
             _WARNING = {"otp_sent", "otp_demo_mode", "sync_error", "ai_error",
@@ -434,13 +458,13 @@ else:
                 elif action in _SUCCESS:
                     icon, color = "🟢", "#22c55e"
                 else:
-                    icon, color = "⚪", "#94a3b8"
+                    icon, color = "⚪", colors["muted"]
 
                 st.markdown(
                     f"<div style='padding:0.25rem 0;border-left:3px solid {color};padding-left:0.6rem;margin-bottom:0.2rem'>"
-                    f"<span class='text-muted' style='font-size:0.8rem'>{ts}</span> "
+                    f"<span style='font-size:0.8rem;color:{colors['text2']}'>{ts}</span> "
                     f"{icon} <strong>{action}</strong>"
-                    + (f" <span class='text-muted'>{detail}</span>" if detail else "")
+                    + (f" <span style='color:{colors['text2']}'>{detail}</span>" if detail else "")
                     + "</div>",
                     unsafe_allow_html=True,
                 )
@@ -449,8 +473,12 @@ else:
 
     # ── Tab 5: Error Log ───────────────────────────────────────────────────
     with tab5:
-        st.header("Application Error Log")
-        st.markdown("*Exceptions and failures captured across all pages*")
+        st.markdown(section_title_html("Application Error Log"), unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-size:0.82rem;color:{colors["text2"]};margin-bottom:0.75rem">'
+            f'Exceptions and failures captured across all pages</div>',
+            unsafe_allow_html=True,
+        )
 
         action_col1, action_col2, _ = st.columns([1, 1, 3])
         with action_col1:
@@ -489,7 +517,7 @@ else:
                 st.markdown(
                     f"<div style='padding:0.4rem 0;border-left:3px solid {color};"
                     f"padding-left:0.6rem;margin-bottom:0.3rem'>"
-                    f"<span class='text-muted' style='font-size:0.8rem'>{ts}</span>"
+                    f"<span style='font-size:0.8rem;color:{colors['text2']}'>{ts}</span>"
                     f"{page_badge} "
                     f"<strong style='color:{color}'>{etype}</strong><br>"
                     f"<span style='font-size:0.9rem'>{msg}</span>"
@@ -499,4 +527,6 @@ else:
         else:
             st.info("No errors recorded yet.")
 
-render_footer(note="🔒 Secure Admin Panel · All actions are logged")
+# ── Footer ─────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(footer_html("🔒 All admin actions are logged"), unsafe_allow_html=True)

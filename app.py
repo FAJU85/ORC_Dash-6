@@ -111,11 +111,32 @@ def _openalex_status() -> bool:
 
 
 def _dot(ok: bool) -> str:
+    """
+    Return an HTML span representing a status dot colored for success or warning.
+    
+    Parameters:
+        ok (bool): If True, the dot uses the success color; if False, it uses the warning color.
+    
+    Returns:
+        str: HTML string for a <span> element with class "orc-dot" and an inline background color.
+    """
     c = colors["success"] if ok else colors["warning"]
     return f'<span class="orc-dot" style="background:{c}"></span>'
 
 
 def _status_block(icon, label, ok, detail):
+    """
+    Render a compact status card HTML snippet for a system component.
+    
+    Parameters:
+        icon (str): HTML or emoji used as the card icon.
+        label (str): Human-readable name of the component (displayed prominently).
+        ok (bool): Component health flag; when true the card shows the connected state.
+        detail (str): Text to display when the component is not connected.
+    
+    Returns:
+        html (str): HTML string for the status card. When `ok` is true the card displays "Connected"; otherwise it displays `detail`. The card includes a colored status dot, the icon, and the label.
+    """
     dot = _dot(ok)
     msg = "Connected" if ok else detail
     return (

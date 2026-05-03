@@ -185,6 +185,18 @@ def _openalex_status() -> bool:
 
 
 def _conn_card(label, ok, ok_txt, fail_txt):
+    """
+    Builds an HTML status card for a connection check.
+    
+    Parameters:
+        label (str): Title displayed on the card.
+        ok (bool): Health flag; selects the success or warning style and message.
+        ok_txt (str): Message displayed when `ok` is True.
+        fail_txt (str): Message displayed when `ok` is False.
+    
+    Returns:
+        html (str): An HTML fragment representing a themed status card containing the label and the selected message colored according to status.
+    """
     c = colors["success"] if ok else colors["warning"]
     txt = ok_txt if ok else fail_txt
     return (

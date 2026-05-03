@@ -34,6 +34,15 @@ rate_limiter = RateLimiter()
 # ============================================
 
 def sync_publications(orcid):
+    """
+    Synchronize a researcher's publications from OpenAlex using their ORCID.
+    
+    Parameters:
+        orcid (str): ORCID identifier in the format `0000-0000-0000-0000`.
+    
+    Returns:
+        tuple: `(inserted_count, error_message)` where `inserted_count` is the number of publications added (0 on failure), and `error_message` is a string describing the failure or `None` on success. Possible error messages include an invalid ORCID format message and a rate-limit message indicating how many seconds to wait.
+    """
     if not validate_orcid(orcid):
         return 0, "Invalid ORCID format. Use: 0000-0000-0000-0000"
 
@@ -145,6 +154,15 @@ if selected_researcher != "All Researchers" and selected_researcher in researche
 if search:
     q = sanitize_string(search, 100).lower()
     def _matches(p):
+        """
+        Check whether the current query string `q` appears in key text fields of a publication record.
+        
+        Parameters:
+            p (Mapping): A publication-like mapping with optional keys `"title"`, `"abstract"`, `"journal_name"`, and `"authors"`. `"authors"` may be a list of author strings.
+        
+        Returns:
+            bool: `True` if `q` is a substring of the title, abstract, journal name, or any author entry (case-insensitive); `False` otherwise.
+        """
         if q in (p.get("title") or "").lower():
             return True
         if q in (p.get("abstract") or "").lower():

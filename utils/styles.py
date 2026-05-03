@@ -42,12 +42,22 @@ LIGHT = {
 # ── Theme-aware chart helpers ─────────────────────────────────────────────────
 
 def get_theme() -> str:
-    """Return 'dark' or 'light' based on session state (defaults to dark)."""
+    """
+    Determine the active UI theme mode from the Streamlit session.
+    
+    Returns:
+        str: 'dark' or 'light' representing the active theme; defaults to 'dark' if no theme is set in session state.
+    """
     return st.session_state.get("theme_mode", "dark")
 
 
 def chart_colors() -> list:
-    """Return ordered chart colours tuned for the active theme."""
+    """
+    Provide an ordered list of hex color strings for charts based on the active theme.
+    
+    Returns:
+        colors (list): Ordered list of hex color strings — theme accent colors first, followed by a fixed set of fallback colors.
+    """
     c = DARK if get_theme() == "dark" else LIGHT
     return [
         c["accent"], c["accent2"], c["success"], c["warning"],
@@ -56,7 +66,16 @@ def chart_colors() -> list:
 
 
 def chart_layout(title: str = "", height: int = 0) -> dict:
-    """Return a Plotly layout dict that matches the active theme."""
+    """
+    Builds a Plotly layout dictionary configured for the current theme.
+    
+    Parameters:
+        title (str): Optional chart title; when provided a left-aligned title block is added to the layout.
+        height (int): Optional layout height in pixels; when non-zero the layout's `height` field is set.
+    
+    Returns:
+        layout (dict): A Plotly-compatible layout dictionary with colors, fonts, axes, legend, margins, and hoverlabel styling matching the active theme.
+    """
     c = DARK if get_theme() == "dark" else LIGHT
     base = {
         "plot_bgcolor":  "rgba(0,0,0,0)",
@@ -367,6 +386,17 @@ def apply_styles():
 # ── HTML component helpers ────────────────────────────────────────────────────
 
 def metric_card_html(icon: str, value: str, label: str) -> str:
+    """
+    Generate an HTML snippet for a compact metric card containing an icon, value, and label.
+    
+    Parameters:
+        icon (str): HTML or plain text to render as the metric icon (e.g., emoji, SVG, or icon markup).
+        value (str): Primary metric value to display; may include simple HTML.
+        label (str): Secondary label or description for the metric; may include simple HTML.
+    
+    Returns:
+        str: A small HTML block for an `.orc-metric` card ready to render with `unsafe_allow_html`.
+    """
     return (
         f'<div class="orc-metric">'
         f'  <div class="orc-metric-icon">{icon}</div>'
@@ -377,13 +407,37 @@ def metric_card_html(icon: str, value: str, label: str) -> str:
 
 
 def badge_html(text: str, kind: str = "year") -> str:
-    """kind: 'oa' | 'year' | 'cite' | 'closed'"""
+    """
+    Produce an HTML span element styled as a badge.
+    
+    Parameters:
+        text (str): Visible text to place inside the badge.
+        kind (str): Badge variant; one of `'oa'`, `'year'`, `'cite'`, or `'closed'`. This selects the `orc-badge-{kind}` CSS modifier.
+    
+    Returns:
+        html (str): HTML string for a `<span>` element with classes `orc-badge` and `orc-badge-{kind}` containing `text`.
+    """
     return f'<span class="orc-badge orc-badge-{kind}">{text}</span>'
 
 
 def pub_card_html(title: str, authors: list, journal: str, year,
                   citations: int, is_oa: bool, abstract: str = "") -> str:
-    auth_html = ""
+    """
+                  Builds an HTML string for a publication card containing title, authors, journal, badges, and an optional abstract snippet.
+                  
+                  Parameters:
+                      title (str): Publication title.
+                      authors (list): Sequence of author names; up to the first three truthy names are shown joined by ", ". If more than three authors exist, a " +N" suffix indicates the remaining count.
+                      journal (str): Name of the journal (rendered with a leading newspaper emoji).
+                      year: Year value; if truthy a year badge is added.
+                      citations (int): If truthy, adds a citations badge formatted with thousand separators (e.g., "1,234 citations").
+                      is_oa (bool): If True adds an "Open Access" badge; otherwise adds a "Subscription" badge.
+                      abstract (str): Optional abstract text; when provided it is truncated to 220 characters and appended with "…" if truncated.
+                  
+                  Returns:
+                      str: HTML markup for a div with class "orc-pub" containing the assembled publication card.
+                  """
+                  auth_html = ""
     if authors:
         shown = ", ".join(str(a) for a in authors[:3] if a)
         if len(authors) > 3:
@@ -417,6 +471,16 @@ def pub_card_html(title: str, authors: list, journal: str, year,
 
 
 def hero_html(title: str, subtitle: str) -> str:
+    """
+    Render a hero section as an HTML string containing a title and subtitle.
+    
+    Parameters:
+        title (str): The heading text for the hero section.
+        subtitle (str): The descriptive subtitle or subheading text.
+    
+    Returns:
+        html (str): HTML markup for a `.orc-hero` block with the given title and subtitle.
+    """
     return (
         f'<div class="orc-hero">'
         f'  <h1>{title}</h1>'
@@ -426,14 +490,37 @@ def hero_html(title: str, subtitle: str) -> str:
 
 
 def section_title_html(text: str) -> str:
+    """
+    Create an HTML paragraph element styled as a section title.
+    
+    Returns:
+        An HTML string for a <p> element with class "orc-section-title" containing the provided text.
+    """
     return f'<p class="orc-section-title">{text}</p>'
 
 
 def theme_toggle_html() -> str:
+    """
+    Produce the label text for a theme toggle based on the current theme.
+    
+    Returns:
+        label (str): "☀️ Light" when the active theme is "dark", "🌙 Dark" otherwise.
+    """
     return "☀️ Light" if get_theme() == "dark" else "🌙 Dark"
 
 
 def footer_html(extra: str = "") -> str:
+    """
+    Builds a centered footer HTML block containing product/version, an optional extra line, and a "Built by" credit link.
+    
+    Uses the active theme to select muted and accent colors for text and link styling.
+    
+    Parameters:
+        extra (str): Optional HTML content rendered as an additional paragraph below the version line. If empty, no extra paragraph is included.
+    
+    Returns:
+        html (str): An HTML string for a centered footer styled according to the current theme.
+    """
     c = DARK if get_theme() == "dark" else LIGHT
     extra_line = f"<p style='margin:0.1rem 0 0'>{extra}</p>" if extra else ""
     return (

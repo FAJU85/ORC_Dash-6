@@ -220,6 +220,19 @@ else:
         st.markdown(section_title_html("Service Status"), unsafe_allow_html=True)
 
         def _svc(label, ok, ok_txt, warn_txt, is_info=False):
+            """
+            Render an HTML status card for a service with a color-coded message.
+            
+            Parameters:
+                label (str): Visible title for the status card.
+                ok (bool): Whether the service is considered healthy; controls color and message choice.
+                ok_txt (str): Message shown when `ok` is True.
+                warn_txt (str): Message shown when `ok` is False.
+                is_info (bool, optional): If True and `ok` is False, use a muted/info color instead of a warning color. Defaults to False.
+            
+            Returns:
+                str: An HTML string for a compact, styled status card suitable for embedding in the dashboard.
+            """
             c = colors["success"] if ok else (colors["muted"] if is_info else colors["warning"])
             txt = ok_txt if ok else warn_txt
             return (

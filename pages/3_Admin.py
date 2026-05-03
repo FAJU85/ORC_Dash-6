@@ -23,8 +23,16 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log
 )
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    footer_html, DARK, LIGHT
+)
 
 st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
+
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 rate_limiter = RateLimiter()
 
@@ -47,7 +55,7 @@ for key, default in [
 # PAGE
 # ============================================
 
-st.title("🔐 Administrator Panel")
+st.markdown(hero_html("🔐 Administrator Panel", "Secure system management & audit console"), unsafe_allow_html=True)
 
 # Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
 admin_email    = get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email", "")
@@ -59,24 +67,13 @@ if admin_password and not admin_hash:
     admin_hash = hash_password(admin_password)
 
 if not admin_email or not admin_hash:
-    st.warning("⚠️ Administrator account not configured")
-    st.markdown("""
-    ### Setup required — add the following to your secrets:
-
-    | Secret | Value |
-    |--------|-------|
-    | `ADMIN_EMAIL` | your@email.com |
-    | `ADMIN_PASSWORD` | your_password |
-
-    **Or use a pre-hashed password (recommended):**
-
-    | Secret | Value |
-    |--------|-------|
-    | `ADMIN_EMAIL` | your@email.com |
-    | `admin.password_hash` | bcrypt or SHA-256 hash |
-
-    See `SECRETS_TEMPLATE.toml` for full instructions.
-    """)
+    st.markdown(
+        f'<div class="orc-card" style="border-left:3px solid {colors["warning"]};max-width:640px">'
+        f'<div style="font-weight:600;font-size:0.95rem;margin-bottom:0.5rem">⚠️ Administrator account not configured</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Add <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> (or <code>admin.password_hash</code>) to your secrets. See <code>SECRETS_TEMPLATE.toml</code> for instructions.</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 # ============================================
@@ -87,7 +84,7 @@ if not st.session_state.admin_authenticated:
 
     if not st.session_state.otp_sent:
         # ── Step 1: Email + Password ─────────────────────────────────────
-        st.header("🔑 Administrator Login")
+        st.markdown(section_title_html("Administrator Login"), unsafe_allow_html=True)
 
         client_key = "admin_login"
         allowed, wait_time = rate_limiter.is_allowed(client_key, max_attempts=5, window_seconds=300)
@@ -135,18 +132,16 @@ if not st.session_state.admin_authenticated:
                         st.error("❌ Could not send verification code")
                         log_audit("otp_send_failed", error)
 
-        st.divider()
         st.markdown(
-            "<div style='text-align:center;color:#64748b;font-size:0.85rem;'>"
-            "🔒 Two-factor authentication required<br>"
-            "A verification code will be sent to your email"
-            "</div>",
+            f'<div style="text-align:center;color:{colors["muted"]};font-size:0.82rem;margin-top:1rem">'
+            f'🔒 Two-factor authentication required · A verification code will be sent to your email'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
     else:
         # ── Step 2: OTP Verification ──────────────────────────────────────
-        st.header("📱 Enter Verification Code")
+        st.markdown(section_title_html("Verification Code"), unsafe_allow_html=True)
         st.markdown(f"A 6-digit code has been sent to **{st.session_state.login_email[:3]}***")
 
         if st.session_state.smtp_not_configured:
@@ -205,47 +200,42 @@ else:
     # ADMIN DASHBOARD
     # ============================================
 
-    st.success("✅ Logged in as Administrator")
-    if st.button("🚪 Logout"):
-        admin_logout()
-        st.rerun()
+    top_c1, top_c2 = st.columns([5, 1])
+    with top_c1:
+        st.markdown(
+            f'<div style="font-size:0.85rem;color:{colors["success"]};font-weight:500">✓ Authenticated as Administrator</div>',
+            unsafe_allow_html=True,
+        )
+    with top_c2:
+        if st.button("Logout", use_container_width=True):
+            admin_logout()
+            st.rerun()
 
     st.divider()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "👥 Researchers", "⚙️ Settings", "📋 Audit Log"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard", "Researchers", "Settings", "Audit Log"])
 
     # ── Tab 1: Dashboard ───────────────────────────────────────────────────
     with tab1:
-        st.header("System Overview")
+        st.markdown(section_title_html("Service Status"), unsafe_allow_html=True)
+
+        def _svc(label, ok, ok_txt, warn_txt, is_info=False):
+            c = colors["success"] if ok else (colors["muted"] if is_info else colors["warning"])
+            txt = ok_txt if ok else warn_txt
+            return (
+                f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+                f'  <div style="font-weight:600;font-size:0.85rem;margin-bottom:0.2rem">{label}</div>'
+                f'  <div style="font-size:0.78rem;color:{c}">{txt}</div>'
+                f'</div>'
+            )
 
         c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.subheader("Database")
-            if is_db_configured():
-                st.success("✅ Connected")
-            else:
-                st.error("❌ Not configured")
-        with c2:
-            st.subheader("AI Service")
-            if get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Not set")
-        with c3:
-            st.subheader("Email (SMTP)")
-            if get_nested_secret("smtp", "user"):
-                st.success("✅ Configured")
-            else:
-                st.warning("⚠️ Demo mode")
-        with c4:
-            st.subheader("Notifications")
-            if get_nested_secret("telegram", "bot_token"):
-                st.success("✅ Configured")
-            else:
-                st.info("ℹ️ Optional")
+        c1.markdown(_svc("Database",      is_db_configured(),                                    "Connected",   "Not configured"),  unsafe_allow_html=True)
+        c2.markdown(_svc("AI Service",    bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")), "Configured", "Not set"),    unsafe_allow_html=True)
+        c3.markdown(_svc("Email (SMTP)",  bool(get_nested_secret("smtp", "user")),               "Configured",  "Demo mode"),       unsafe_allow_html=True)
+        c4.markdown(_svc("Telegram",      bool(get_nested_secret("telegram", "bot_token")),      "Configured",  "Optional",  True), unsafe_allow_html=True)
 
-        st.divider()
-        st.header("📊 Statistics")
+        st.markdown(section_title_html("Statistics"), unsafe_allow_html=True)
 
         stats, _ = execute_query("""
             SELECT COUNT(*) as count,
@@ -265,8 +255,7 @@ else:
 
     # ── Tab 2: Researchers ─────────────────────────────────────────────────
     with tab2:
-        st.header("👥 Manage Researchers")
-        st.subheader("➕ Add New Researcher")
+        st.markdown(section_title_html("Add Researcher"), unsafe_allow_html=True)
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -288,8 +277,7 @@ else:
             else:
                 st.warning("Please enter an ORCID")
 
-        st.divider()
-        st.subheader("📋 Current Researchers")
+        st.markdown(section_title_html("Current Researchers"), unsafe_allow_html=True)
 
         researchers = get_active_researchers()
         if researchers:
@@ -329,35 +317,42 @@ else:
 
     # ── Tab 3: Settings ────────────────────────────────────────────────────
     with tab3:
-        st.header("System Settings")
-
-        st.subheader("AI Configuration")
+        st.markdown(section_title_html("AI Configuration"), unsafe_allow_html=True)
         current_model = get_secret("AI_MODEL") or "llama-3.3-70b-versatile"
-        st.info(f"**Active model:** `{current_model}`  \nSet the `AI_MODEL` key in your environment or secrets to change it.")
+        st.markdown(
+            f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+            f'<div style="font-size:0.8rem;color:{colors["text2"]}">Active model</div>'
+            f'<div style="font-weight:600;font-family:monospace;font-size:0.9rem;margin-top:0.2rem">{current_model}</div>'
+            f'<div style="font-size:0.78rem;color:{colors["muted"]};margin-top:0.25rem">Set <code>AI_MODEL</code> in your secrets to override.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-        st.divider()
-        st.subheader("Cache Management")
-        if st.button("🗑️ Clear Application Cache"):
-            st.cache_data.clear()
-            log_audit("cache_cleared")
-            st.success("✅ Cache cleared!")
+        st.markdown(section_title_html("Maintenance"), unsafe_allow_html=True)
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            if st.button("🗑️ Clear Application Cache", use_container_width=True):
+                st.cache_data.clear()
+                log_audit("cache_cleared")
+                st.success("✅ Cache cleared!")
+        with mc2:
+            if st.button("💾 Flush Audit Log to Storage", use_container_width=True):
+                flush_audit_log()
+                st.success("✅ Audit log flushed!")
 
-        if st.button("💾 Flush Audit Log to Storage"):
-            flush_audit_log()
-            st.success("✅ Audit log flushed!")
-
-        st.divider()
-        st.subheader("Security")
-        st.info(f"**Admin Email:** {admin_email}")
-        st.info(
-            "To change admin credentials, update the `[admin]` section in your "
-            "environment secrets."
+        st.markdown(section_title_html("Security"), unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
+            f'<div style="font-size:0.8rem;color:{colors["text2"]}">Admin email</div>'
+            f'<div style="font-weight:600;font-size:0.9rem;margin-top:0.2rem">{admin_email}</div>'
+            f'<div style="font-size:0.78rem;color:{colors["muted"]};margin-top:0.25rem">Update credentials via the <code>[admin]</code> section in your secrets.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
 
     # ── Tab 4: Audit Log ───────────────────────────────────────────────────
     with tab4:
-        st.header("Security Audit Log")
-        st.markdown("*Recent security-relevant events*")
+        st.markdown(section_title_html("Security Audit Log"), unsafe_allow_html=True)
 
         col_load, _ = st.columns([1, 3])
         with col_load:
@@ -377,9 +372,4 @@ else:
 
 # ── Footer ─────────────────────────────────────────────────────────────────
 st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "🔒 Secure Admin Panel · All actions are logged"
-    "</div>",
-    unsafe_allow_html=True,
-)
+st.markdown(footer_html("🔒 All admin actions are logged"), unsafe_allow_html=True)

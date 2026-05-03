@@ -11,8 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import sanitize_string, validate_email, log_audit, RateLimiter
 from utils.email_service import send_bug_report_notification, create_github_issue
+from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, DARK, LIGHT
 
-st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="centered")
+st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="wide")
+
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -27,10 +32,8 @@ if "github_url" not in st.session_state:
 # PAGE
 # ============================================
 
-st.title("🐛 Report a Bug")
-st.markdown("Help us improve by reporting issues you encounter")
+st.markdown(hero_html("🐛 Bug Report", "Help us improve by reporting issues you encounter"), unsafe_allow_html=True)
 
-st.divider()
 
 if st.session_state.bug_submitted:
     # Success state
@@ -58,7 +61,7 @@ else:
     
     # Bug report form
     with st.form("bug_form"):
-        st.subheader("What went wrong?")
+        st.markdown(section_title_html("What went wrong?"), unsafe_allow_html=True)
         
         summary = st.text_input(
             "Summary *",
@@ -162,20 +165,19 @@ else:
                         log_audit("bug_report_submitted", summary[:50])
                         st.rerun()
     
-    # Tips
-    st.divider()
-    st.markdown("""
-    **💡 Tips for a good bug report:**
-    - Be specific about what happened
-    - Include steps to reproduce the issue
-    - Mention which page/feature was affected
-    - Include any error messages you saw
-    """)
+    st.markdown(
+        f'<div class="orc-card" style="padding:0.9rem 1.25rem;margin-top:0.5rem">'
+        f'<div style="font-weight:600;font-size:0.82rem;margin-bottom:0.35rem;color:{colors["text2"]}">TIPS FOR A GOOD REPORT</div>'
+        f'<div style="font-size:0.82rem;color:{colors["text2"]};line-height:1.7">'
+        f'· Be specific about what happened<br>'
+        f'· Include the steps that triggered the issue<br>'
+        f'· Mention which page or feature was affected<br>'
+        f'· Copy any error messages you saw'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-# Footer
+# ── Footer ───────────────────────────────────────────────────────────────────
 st.divider()
-st.markdown("""
-<div style="text-align: center; color: #64748b; font-size: 0.8rem;">
-    Your feedback helps us improve the dashboard for everyone
-</div>
-""", unsafe_allow_html=True)
+st.markdown(footer_html("Your feedback helps improve the dashboard for everyone"), unsafe_allow_html=True)

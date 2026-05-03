@@ -9,8 +9,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import get_secret, sanitize_string, log_audit, RateLimiter
+from utils.styles import (
+    apply_styles, get_theme, hero_html, section_title_html,
+    footer_html, DARK, LIGHT
+)
 
 st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
+
+apply_styles()
+
+colors = DARK if get_theme() == "dark" else LIGHT
 
 rate_limiter = RateLimiter()
 
@@ -19,8 +27,6 @@ rate_limiter = RateLimiter()
 # ============================================
 
 def get_ai_response(message, paper=None):
-    """Get response from the configured AI service"""
-
     session_id = st.session_state.get('session_token', 'default')
     allowed, wait_time = rate_limiter.is_allowed(f"ai_{session_id}", max_attempts=20, window_seconds=60)
     if not allowed:
@@ -32,7 +38,6 @@ def get_ai_response(message, paper=None):
     if not api_key:
         return None, "AI service not configured"
 
-    # Model is configurable; fall back to a capable default
     model = get_secret("AI_MODEL") or "llama-3.3-70b-versatile"
 
     try:
@@ -94,38 +99,59 @@ if "chat_history" not in st.session_state:
 # PAGE
 # ============================================
 
-st.title("🔬 AI Research Assistant")
+st.markdown(hero_html("🔬 AI Research Assistant", "Analyze papers, extract insights, and explore your research"), unsafe_allow_html=True)
 
 api_key = get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
 if not api_key:
-    st.error("❌ AI service not configured")
-    st.info("Contact administrator to enable AI features.")
+    st.markdown(
+        f'<div class="orc-card" style="border-left:4px solid {colors["error"]};padding:1.25rem 1.5rem;">'
+        f'<div style="font-weight:600;font-size:0.95rem;margin-bottom:0.3rem">❌ AI Service Not Configured</div>'
+        f'<div style="font-size:0.85rem;opacity:0.7">Contact the administrator to enable AI features.</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+    st.markdown(footer_html(), unsafe_allow_html=True)
     st.stop()
 
-st.success("✅ AI Service Ready")
-st.divider()
+# ── Selected Paper Card ─────────────────────────────────────────────────────
+st.markdown(section_title_html("Selected Paper"), unsafe_allow_html=True)
 
-# ── Selected Paper ──────────────────────────────────────────────────────────
 paper = st.session_state.get("selected_paper")
 
-st.header("📄 Selected Paper")
-
 if paper:
-    st.markdown(f"""
-**{paper.get('title', 'Unknown')}**
-📰 {paper.get('journal_name', '')} • {paper.get('publication_year', '')} • {paper.get('citation_count', 0)} citations
-    """)
-    if st.button("❌ Clear Selection"):
-        st.session_state.selected_paper = None
-        log_audit("paper_deselected")
-        st.rerun()
+    citations = paper.get('citation_count', 0) or 0
+    year = paper.get('publication_year', '')
+    journal = paper.get('journal_name', '')
+    c1, c2 = st.columns([5, 1])
+    with c1:
+        st.markdown(
+            f'<div class="orc-card" style="border-left:4px solid {colors["accent"]};padding:1rem 1.25rem;">'
+            f'  <div style="font-weight:600;font-size:0.95rem;margin-bottom:0.4rem">{paper.get("title","Unknown")}</div>'
+            f'  <div style="font-size:0.8rem;opacity:0.7">📰 {journal}</div>'
+            f'  <div style="font-size:0.78rem;opacity:0.55;margin-top:0.2rem">{year} · {citations:,} citations</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.write("")
+        st.write("")
+        if st.button("✕ Clear", use_container_width=True):
+            st.session_state.selected_paper = None
+            log_audit("paper_deselected")
+            st.rerun()
 else:
-    st.info("💡 Select a paper from the **Publications** page for detailed analysis.")
-
-st.divider()
+    st.markdown(
+        f'<div class="orc-card" style="text-align:center;padding:1.5rem;border:1px dashed {colors["border"]};">'
+        f'<div style="font-size:1.75rem;margin-bottom:0.4rem">📄</div>'
+        f'<div style="font-weight:600;font-size:0.9rem;margin-bottom:0.2rem">No paper selected</div>'
+        f'<div style="font-size:0.8rem;opacity:0.6">Go to <strong>Publications</strong> and click Analyze on any paper</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Quick Actions ───────────────────────────────────────────────────────────
-st.header("⚡ Quick Actions")
+st.markdown(section_title_html("Quick Actions"), unsafe_allow_html=True)
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -145,10 +171,8 @@ with col4:
     if st.button("🔗 Implications", use_container_width=True, disabled=not paper):
         st.session_state.pending = "What are the practical implications of this research?"
 
-st.divider()
-
 # ── Chat Interface ──────────────────────────────────────────────────────────
-st.header("💬 Chat")
+st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
 
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
@@ -172,7 +196,6 @@ if "pending" in st.session_state and st.session_state.pending:
             st.session_state.chat_history.append({"role": "assistant", "content": f"⚠️ {error}"})
     st.rerun()
 
-# Chat input
 user_input = st.chat_input("Ask about your research papers…")
 
 if user_input:
@@ -197,10 +220,6 @@ if st.session_state.chat_history:
         log_audit("chat_cleared")
         st.rerun()
 
+# ── Footer ───────────────────────────────────────────────────────────────────
 st.divider()
-st.markdown(
-    "<div style='text-align:center;color:#64748b;font-size:0.8rem;'>"
-    "Select a paper from Publications for detailed analysis"
-    "</div>",
-    unsafe_allow_html=True,
-)
+st.markdown(footer_html(), unsafe_allow_html=True)

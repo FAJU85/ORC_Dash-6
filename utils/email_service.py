@@ -207,38 +207,100 @@ def get_telegram_chat_id() -> str:
     return _discover_chat_id(bot_token)
 
 
+# ── SMTP email ───────────────────────────────────────────────────────────────
+
+def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple:
+    """
+    Send a plain-text email via SMTP (Gmail-compatible).
+    Reads SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD from secrets.
+    Returns (success, error_or_None).
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    smtp_host = get_secret("SMTP_HOST") or get_nested_secret("smtp", "host", "smtp.gmail.com")
+    smtp_port = int(get_secret("SMTP_PORT") or get_nested_secret("smtp", "port", "587") or 587)
+    smtp_user = get_secret("SMTP_USER") or get_nested_secret("smtp", "user", "")
+    smtp_pass = get_secret("SMTP_PASSWORD") or get_nested_secret("smtp", "password", "")
+
+    if not smtp_user or not smtp_pass:
+        return False, "SMTP_NOT_CONFIGURED"
+
+    if not to_email:
+        to_email = (
+            get_secret("ADMIN_EMAIL")
+            or get_nested_secret("admin", "email", "")
+        )
+    if not to_email:
+        return False, "No recipient email configured"
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"]    = smtp_user
+        msg["To"]      = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+
+        log_audit("smtp_email_sent", to_email[:20])
+        return True, None
+    except Exception as e:
+        log_audit("smtp_error", str(e)[:60])
+        return False, str(e)
+
+
 # ── Bug-report notifications ─────────────────────────────────────────────────
 
 def send_bug_report_notification(summary, full_description, user_contact, github_url=None) -> tuple:
-    """Send bug report to the admin via Telegram. Returns (success, error_or_None)."""
+    """
+    Send bug report via Telegram, then email as fallback.
+    Returns (success, error_or_None).
+    """
+    desc_snippet = full_description[:400] + ("…" if len(full_description) > 400 else "")
+
+    # ── Try Telegram ──────────────────────────────────────────────────────
     bot_token = _get_bot_token()
     chat_id   = _get_chat_id() or (bot_token and _discover_chat_id(bot_token)) or ""
 
-    if not bot_token or not chat_id:
-        log_audit("bug_report_telegram_not_configured")
-        return False, "Telegram not configured"
-
-    desc_snippet = full_description[:300]
-    ellipsis = "…" if len(full_description) > 300 else ""
-    message = (
-        f"🐞 NEW BUG REPORT\n\n"
-        f"Summary: {summary[:100]}\n"
-        f"From: {user_contact or 'Anonymous'}\n\n"
-        f"{desc_snippet}{ellipsis}"
-    )
-    if github_url:
-        message += f"\n\nIssue: {github_url}"
-
-    try:
-        ok, err = _telegram_send(bot_token, chat_id, message)
+    if bot_token and chat_id:
+        message = (
+            f"🐞 NEW BUG REPORT\n\n"
+            f"Summary: {summary[:100]}\n"
+            f"From: {user_contact or 'Anonymous'}\n\n"
+            f"{desc_snippet}"
+        )
+        if github_url:
+            message += f"\n\nIssue: {github_url}"
+        ok, _ = _telegram_send(bot_token, chat_id, message)
         if ok:
             log_audit("bug_report_telegram_sent")
             return True, None
-        log_audit("bug_report_telegram_error", err)
-        return False, err
-    except Exception as e:
-        log_audit("bug_report_telegram_error", type(e).__name__)
-        return False, str(e)
+        log_audit("bug_report_telegram_failed")
+
+    # ── Fallback: SMTP email ──────────────────────────────────────────────
+    subject = f"[ORC Bug Report] {summary[:80]}"
+    body = (
+        f"Bug Report\n{'='*40}\n\n"
+        f"Summary  : {summary}\n"
+        f"Reporter : {user_contact or 'Anonymous'}\n\n"
+        f"Description:\n{full_description}\n"
+    )
+    if github_url:
+        body += f"\nGitHub Issue: {github_url}\n"
+
+    email_ok, email_err = send_smtp_email(subject, body)
+    if email_ok:
+        log_audit("bug_report_email_sent")
+        return True, None
+
+    log_audit("bug_report_all_failed", str(email_err)[:40])
+    return False, f"Telegram not reachable; email: {email_err}"
 
 
 # ── GitHub issue creation ────────────────────────────────────────────────────

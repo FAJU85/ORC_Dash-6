@@ -162,35 +162,35 @@ if not st.session_state.admin_authenticated:
                 get_secret("TELEGRAM_BOT_TOKEN")
                 or get_nested_secret("telegram", "bot_token", "")
             )
-            _has_chat  = bool(
-                get_secret("TELEGRAM_CHAT_ID")
-                or get_nested_secret("telegram", "admin_chat_id", "")
-            )
-            _has_relay = bool(get_secret("TELEGRAM_RELAY_URL"))
-            _tg_configured = _has_relay or _has_token
+            tg_err = st.session_state.get("otp_tg_error", "")
 
-            if _tg_configured:
-                tg_err = st.session_state.get("otp_tg_error", "")
+            if _has_token and tg_err:
                 if "CHAT_ID_NOT_CONFIGURED" in tg_err:
                     st.warning(
-                        "⚠️ Bot token is set but no Chat ID found yet.\n\n"
-                        "**Fix:** Open your Telegram app, send any message to the bot "
-                        "(e.g. type `/start`), then come back and try logging in again. "
-                        "The system will auto-detect your Chat ID."
+                        "⚠️ Bot token found but no Chat ID yet — "
+                        "send any message to the bot in Telegram, then retry login."
                     )
-                elif tg_err:
-                    st.error(f"❌ Telegram error: `{tg_err}`")
                 else:
-                    st.error("❌ Could not deliver OTP via Telegram.")
-                st.markdown(
-                    f'<div style="font-size:0.8rem;color:{colors["muted"]};margin-top:0.5rem">'
-                    f'Go to <strong>Admin → Settings → Telegram Notifications</strong> '
-                    f'and click <em>Send Test Message</em> to diagnose the connection.</div>',
-                    unsafe_allow_html=True,
-                )
+                    st.warning(f"⚠️ Telegram unavailable (`{tg_err[:80]}`). Using on-screen code.")
+            elif not _has_token:
+                st.info("ℹ️ Telegram not configured — using on-screen code (demo mode).")
             else:
-                st.warning("⚠️ Telegram not configured. Demo mode — code shown for testing only:")
-                st.info(f"🔐 **{st.session_state.otp_code}**")
+                st.warning("⚠️ Telegram delivery failed — using on-screen code as fallback.")
+
+            st.markdown(
+                f'<div class="orc-card" style="text-align:center;padding:1.5rem;'
+                f'border:2px solid {colors["warning"]};margin-top:0.5rem">'
+                f'<div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;'
+                f'letter-spacing:0.08em;color:{colors["warning"]};margin-bottom:0.5rem">'
+                f'Verification Code</div>'
+                f'<div style="font-size:2.2rem;font-weight:700;font-family:monospace;'
+                f'letter-spacing:0.3em;color:{colors["text"]}">'
+                f'{st.session_state.otp_code}</div>'
+                f'<div style="font-size:0.75rem;color:{colors["muted"]};margin-top:0.4rem">'
+                f'Expires in 5 minutes</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
         otp_key = f"otp_{st.session_state.login_email}"
         allowed, wait_time = rate_limiter.is_allowed(otp_key, max_attempts=5, window_seconds=300)

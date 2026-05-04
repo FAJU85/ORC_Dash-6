@@ -18,11 +18,13 @@ from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    pub_card_html, footer_html, DARK, LIGHT
+    pub_card_html, footer_html, render_navbar, DARK, LIGHT
 )
 
-st.set_page_config(page_title="Publications", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Publications", page_icon="📚", layout="wide",
+                   initial_sidebar_state="collapsed")
 apply_styles()
+render_navbar("publications")
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
@@ -78,7 +80,7 @@ if "current_page" not in st.session_state:
 st.markdown(hero_html("📚 Publications", "Browse, search, and export your research portfolio"), unsafe_allow_html=True)
 
 # ── Sync Section ────────────────────────────────────────────────────────────
-st.markdown(section_title_html("Sync from OpenAlex"), unsafe_allow_html=True)
+st.markdown(section_title_html("Sync Publications"), unsafe_allow_html=True)
 
 if can_sync_publications():
     col1, col2 = st.columns([3, 1])
@@ -116,7 +118,7 @@ if not pubs:
         f'<div class="orc-card" style="text-align:center;padding:2.5rem;">'
         f'<div style="font-size:2.5rem;margin-bottom:0.75rem">📭</div>'
         f'<div style="font-weight:600;font-size:1rem;margin-bottom:0.25rem">No publications yet</div>'
-        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use Sync Now to fetch publications from OpenAlex</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use Sync Now to fetch your publications</div>'
         f'</div>',
         unsafe_allow_html=True,
     )

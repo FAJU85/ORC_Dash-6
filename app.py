@@ -15,7 +15,7 @@ from utils.security import (
 )
 from utils.hf_data import load_publications, get_active_researchers
 from utils.styles import (
-    apply_styles, get_theme, theme_toggle_html,
+    apply_styles, get_theme, theme_toggle_html, render_navbar,
     metric_card_html, pub_card_html, section_title_html,
     hero_html, footer_html, DARK, LIGHT
 )
@@ -25,11 +25,12 @@ st.set_page_config(
     page_title="ORC Research Dashboard",
     page_icon="https://i.ibb.co/C3m0Gs0p/ORC-LOGO2-page-0001-1.jpg",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
 )
 
 init_session()
 apply_styles()
+render_navbar("")   # "" = home
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
@@ -42,8 +43,6 @@ with col_title:
         unsafe_allow_html=True,
     )
 with col_toggle:
-    st.write("")
-    st.write("")
     st.write("")
     if st.button(theme_toggle_html(), use_container_width=True):
         new_theme = "light" if get_theme() == "dark" else "dark"
@@ -92,7 +91,7 @@ else:
         f'<div class="orc-card" style="text-align:center;padding:2rem;">'
         f'<div style="font-size:2rem;margin-bottom:0.5rem">📭</div>'
         f'<div style="font-weight:600;margin-bottom:0.25rem">No publications yet</div>'
-        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use the <strong>Publications</strong> page to sync from OpenAlex</div>'
+        f'<div style="font-size:0.85rem;color:{colors["text2"]}">Use the <strong>Publications</strong> page to sync your research data</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -148,7 +147,7 @@ oa_ok = check_openalex_status()
 c1, c2, c3 = st.columns(3)
 c1.markdown(_status_block("🗄️", "Data Storage",  db_ok, "Not configured"), unsafe_allow_html=True)
 c2.markdown(_status_block("🤖", "AI Service",     ai_ok, "Not configured"), unsafe_allow_html=True)
-c3.markdown(_status_block("🔗", "OpenAlex API",   oa_ok, "Unavailable"),    unsafe_allow_html=True)
+c3.markdown(_status_block("🔗", "Data Source",    oa_ok, "Unavailable"),    unsafe_allow_html=True)
 
 # ── Researchers ───────────────────────────────────────────────────────────────
 researchers = get_active_researchers()

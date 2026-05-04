@@ -26,11 +26,13 @@ from utils.hf_data import (
 )
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    footer_html, DARK, LIGHT
+    footer_html, render_navbar, DARK, LIGHT
 )
 
-st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide")
+st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide",
+                   initial_sidebar_state="collapsed")
 apply_styles()
+render_navbar("admin")
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
@@ -344,7 +346,7 @@ else:
                         pubs = load_publications(orcid=r.get('orcid'))
                         st.caption(f"📄 {len(pubs)} pubs")
                     with c4:
-                        if st.button("🔄 Sync", key=f"sync_{r.get('orcid')}", help="Sync from OpenAlex"):
+                        if st.button("🔄 Sync", key=f"sync_{r.get('orcid')}", help="Sync publications"):
                             with st.spinner("Syncing…"):
                                 cnt, err = sync_from_openalex(r.get('orcid'))
                             if err:
@@ -380,20 +382,68 @@ else:
         )
 
         st.markdown(section_title_html("Telegram Notifications"), unsafe_allow_html=True)
+        from utils.email_service import test_telegram_connection, get_telegram_chat_id
         relay_url    = get_secret("TELEGRAM_RELAY_URL")
         relay_secret = get_secret("TELEGRAM_RELAY_SECRET")
-        tg_token     = get_nested_secret("telegram", "bot_token", "")
-        tg_chat_id   = get_nested_secret("telegram", "admin_chat_id", "")
+        tg_token     = get_secret("TELEGRAM_BOT_TOKEN") or get_nested_secret("telegram", "bot_token", "")
+        tg_chat_id   = get_secret("TELEGRAM_CHAT_ID") or get_nested_secret("telegram", "admin_chat_id", "")
 
-        if relay_url:
-            st.success("✅ Cloudflare relay configured — Telegram OTP delivery active")
-        else:
-            st.warning("⚠️ Set `TELEGRAM_RELAY_URL` and `TELEGRAM_RELAY_SECRET` secrets to enable Telegram OTP.")
-        st.markdown(f"**Bot token:** {'✅ set' if tg_token else '⚪ not set'}")
-        st.markdown(f"**Chat ID:** {'✅ set' if tg_chat_id else '⚪ not set'}")
-        st.markdown(f"**Relay secret:** {'✅ set' if relay_secret else '❌ missing'}")
+        # Status cards
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.markdown(
+            f'<div class="orc-card" style="padding:0.75rem 1rem">'
+            f'<div style="font-size:0.75rem;color:{colors["text2"]}">BOT TOKEN</div>'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if tg_token else colors["warning"]}">'
+            f'{"✅ Configured" if tg_token else "⚠️ Missing"}</div>'
+            f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_BOT_TOKEN</div>'
+            f'</div>', unsafe_allow_html=True)
+        sc2.markdown(
+            f'<div class="orc-card" style="padding:0.75rem 1rem">'
+            f'<div style="font-size:0.75rem;color:{colors["text2"]}">CHAT ID</div>'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if tg_chat_id else colors["warning"]}">'
+            f'{"✅ Configured" if tg_chat_id else "⚠️ Missing"}</div>'
+            f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_CHAT_ID</div>'
+            f'</div>', unsafe_allow_html=True)
+        sc3.markdown(
+            f'<div class="orc-card" style="padding:0.75rem 1rem">'
+            f'<div style="font-size:0.75rem;color:{colors["text2"]}">RELAY</div>'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if relay_url else colors["muted"]}">'
+            f'{"✅ Active" if relay_url else "— Not used"}</div>'
+            f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_RELAY_URL</div>'
+            f'</div>', unsafe_allow_html=True)
 
-        if relay_url and st.button("📨 Send Test OTP via Telegram", key="test_tg_relay"):
+        ta1, ta2 = st.columns(2)
+        with ta1:
+            if tg_token and st.button("🔍 Get My Chat ID", key="tg_get_chat_id",
+                                      help="Finds your Telegram chat ID automatically — send any message to the bot first",
+                                      use_container_width=True):
+                discovered = get_telegram_chat_id()
+                if discovered:
+                    st.success(f"✅ Chat ID found: **`{discovered}`**")
+                    st.info("Add this as `TELEGRAM_CHAT_ID` in your HF Space secrets.")
+                else:
+                    st.error("❌ No messages found. Send any message to the bot in Telegram, then try again.")
+        with ta2:
+            if tg_token and st.button("📨 Send Test Message", key="test_tg_direct",
+                                      help="Sends a test message to verify everything works",
+                                      use_container_width=True):
+                with st.spinner("Testing…"):
+                    res = test_telegram_connection()
+                if res["ok"]:
+                    st.success(f"✅ Message sent! Bot: @{res['bot_name']} · Chat: {res['chat_id']}")
+                else:
+                    st.error(f"❌ {res['error']}")
+
+        if not tg_token:
+            st.info(
+                "**To set up Telegram notifications:**\n"
+                "1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram\n"
+                "2. Add the bot token as `TELEGRAM_BOT_TOKEN` in your HF Space secrets\n"
+                "3. Send any message to your bot\n"
+                "4. Click **Get My Chat ID** above and add the result as `TELEGRAM_CHAT_ID`"
+            )
+
+        if relay_url and st.button("📡 Test Relay Connection", key="test_tg_relay"):
             import json as _json
             import urllib.request
             import urllib.parse
@@ -410,9 +460,9 @@ else:
                         body = r.read().decode()
                     result = _json.loads(body)
                     if result.get("ok"):
-                        st.success("✅ Test message delivered! Check your Telegram.")
+                        st.success("✅ Relay test delivered! Check your Telegram.")
                     else:
-                        st.error(f"❌ Relay reached Telegram but got error: {body}")
+                        st.error(f"❌ Relay error: {body}")
                 except Exception as e:
                     st.error(f"❌ {type(e).__name__}: {e}")
 

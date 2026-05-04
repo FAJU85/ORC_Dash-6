@@ -243,6 +243,11 @@ hr { margin: 1.25rem 0 !important; }
 [data-testid="stChatMessage"] { border-radius: 8px !important; }
 [data-testid="stExpander"]    { border-radius: 8px !important; }
 .streamlit-expanderHeader { font-size: 0.85rem !important; font-weight: 600 !important; }
+/* Chat input bar — prevent black bar in light mode */
+[data-testid="stBottom"],
+[data-testid="stBottom"] > div,
+[data-testid="stChatInputContainer"],
+[data-testid="stChatInputContainer"] > div { border-radius: 8px !important; }
 [data-testid="stMetricValue"] {
     font-size: 1.75rem !important; font-weight: 700 !important;
     letter-spacing: -0.02em !important;
@@ -347,7 +352,19 @@ hr                                      {{ border-color: {border} !important; op
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
 
-/* Navbar — dark mode */
+/* Chat input bar */
+[data-testid="stBottom"]            {{ background: {bg} !important; }}
+[data-testid="stBottom"] > div      {{ background: {bg} !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
+
+/* Chat messages */
+[data-testid="stChatMessage"]       {{ background: {surface} !important; }}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
+
+/* Navbar */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}
 .orc-nav-logo {{ color: {text} !important; border-right-color: {border}; }}
 .orc-nav-item {{ color: {text2} !important; }}
@@ -439,6 +456,18 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+
+/* Chat input bar */
+[data-testid="stBottom"]            {{ background: {bg} !important; }}
+[data-testid="stBottom"] > div      {{ background: {bg} !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
+
+/* Chat messages */
+[data-testid="stChatMessage"]       {{ background: {surface} !important; }}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
 
 /* Navbar — light mode */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}

@@ -11,11 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, DARK, LIGHT
+from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, DARK, LIGHT
 from utils.ui import check_openalex_status
 
-st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide",
+                   initial_sidebar_state="collapsed")
 apply_styles()
+render_navbar("settings")
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
@@ -203,7 +205,7 @@ oa_ok = check_openalex_status()
 cc1, cc2, cc3 = st.columns(3)
 cc1.markdown(_conn_card("Database",    is_db_configured(),                                          "Connected",  "Not configured"), unsafe_allow_html=True)
 cc2.markdown(_conn_card("AI Service",  bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")), "Available", "Not configured"), unsafe_allow_html=True)
-cc3.markdown(_conn_card("OpenAlex",    oa_ok,                                                        "Online",    "Unavailable"),    unsafe_allow_html=True)
+cc3.markdown(_conn_card("Data Source",  oa_ok,                                                        "Online",    "Unavailable"),    unsafe_allow_html=True)
 
 # ── About ───────────────────────────────────────────────────────────────────
 st.markdown(section_title_html("About"), unsafe_allow_html=True)
@@ -211,7 +213,7 @@ st.markdown(
     f'<div class="orc-card" style="padding:1rem 1.5rem">'
     f'<div style="font-weight:700;font-size:0.95rem;margin-bottom:0.5rem">ORC Research Dashboard · v1.0</div>'
     f'<div style="font-size:0.83rem;color:{colors["text2"]};line-height:1.75">'
-    f'📚 Publication tracking via OpenAlex<br>'
+    f'📚 Automated publication tracking<br>'
     f'🔬 AI-powered research assistant<br>'
     f'📊 Interactive analytics &amp; visualizations<br>'
     f'📥 Export to CSV, BibTeX, JSON<br>'

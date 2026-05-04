@@ -14,15 +14,17 @@ from pydantic import ValidationError
 from utils.security import get_secret, sanitize_string, log_audit, log_error, RateLimiter
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    footer_html, DARK, LIGHT
+    footer_html, render_navbar, DARK, LIGHT
 )
 from utils.ai_schemas import (
     AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
     PaperSummary, KeyFindings, Methodology, Implications,
 )
 
-st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide")
+st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide",
+                   initial_sidebar_state="collapsed")
 apply_styles()
+render_navbar("ai assistant")
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

@@ -113,8 +113,11 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
 _BASE_CSS = """
 <style>
 /* ── Hide Streamlit chrome ──────────────────────────── */
-#MainMenu, footer, .stDeployButton { visibility: hidden !important; display: none !important; }
-[data-testid="stToolbar"]          { display: none !important; }
+#MainMenu, footer, .stDeployButton  { visibility: hidden !important; display: none !important; }
+[data-testid="stToolbar"]           { display: none !important; }
+[data-testid="stSidebarNav"]        { display: none !important; }
+[data-testid="collapsedControl"]    { display: none !important; }
+section[data-testid="stSidebar"]    { display: none !important; }
 
 /* ── Typography ─────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -122,7 +125,48 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Layout ─────────────────────────────────────────── */
 .block-container,
-[data-testid="stMainBlockContainer"] { padding-top: 1.5rem !important; max-width: 1200px !important; }
+[data-testid="stMainBlockContainer"] { padding-top: 0.5rem !important; max-width: 1200px !important; }
+
+/* ── Top navigation bar ─────────────────────────────── */
+.orc-navbar {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.35rem 0.75rem;
+    margin: -0.5rem -1rem 1.25rem;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    flex-wrap: wrap;
+}
+.orc-nav-logo {
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-right: 0.75rem;
+    padding-right: 0.75rem;
+    border-right-width: 1px;
+    border-right-style: solid;
+    white-space: nowrap;
+}
+.orc-nav-item {
+    text-decoration: none !important;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+@media (max-width: 768px) {
+    .orc-navbar { gap: 0.1rem; padding: 0.3rem 0.5rem; }
+    .orc-nav-logo { display: none; }
+    .orc-nav-item { padding: 0.25rem 0.4rem; font-size: 0.75rem; }
+}
 
 /* ── Card ───────────────────────────────────────────── */
 .orc-card {
@@ -300,6 +344,21 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+
+/* Navbar — dark mode */
+.orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}
+.orc-nav-logo {{ color: {text} !important; border-right-color: {border}; }}
+.orc-nav-item {{ color: {text2} !important; }}
+.orc-nav-item:hover {{ background: {surface2} !important; color: {text} !important; }}
+.orc-nav-item.active {{ background: {surface2} !important; color: {accent} !important; font-weight: 600; }}
+
+/* Icon / emoji containers — ensure contrast */
+.orc-metric .orc-metric-icon {{ filter: none; }}
+.orc-dot {{ border: 1px solid rgba(255,255,255,0.1); }}
+
+/* Toggle button override */
+.stButton > button[title*="Light"],
+.stButton > button[title*="Dark"] {{ min-width: 80px !important; }}
 </style>
 """
 
@@ -377,6 +436,16 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+
+/* Navbar — light mode */
+.orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}
+.orc-nav-logo {{ color: {text} !important; border-right-color: {border}; }}
+.orc-nav-item {{ color: {text2} !important; }}
+.orc-nav-item:hover {{ background: {surface2} !important; color: {text} !important; }}
+.orc-nav-item.active {{ background: {surface2} !important; color: {accent} !important; font-weight: 600; }}
+
+/* Icon / emoji containers — light-mode contrast */
+.orc-dot {{ border: 1px solid rgba(0,0,0,0.08); }}
 </style>
 """
 
@@ -510,13 +579,44 @@ def section_title_html(text: str) -> str:
 
 
 def theme_toggle_html() -> str:
-    """
-    Produce the label text for a theme toggle based on the current theme.
-    
-    Returns:
-        label (str): "☀️ Light" when the active theme is "dark", "🌙 Dark" otherwise.
-    """
     return "☀️ Light" if get_theme() == "dark" else "🌙 Dark"
+
+
+def render_navbar(current: str = "") -> None:
+    """
+    Render a horizontal top navigation bar.
+    Call this at the very top of each page (after apply_styles).
+    `current` should be the page slug, e.g. 'publications', 'admin', etc.
+    """
+    theme_param = f"?theme={get_theme()}"
+
+    pages = [
+        ("/",             "🏠", "Home"),
+        ("/Publications", "📚", "Publications"),
+        ("/AI_Assistant", "🤖", "AI Assistant"),
+        ("/Analytics",    "📊", "Analytics"),
+        ("/Settings",     "⚙️", "Settings"),
+        ("/Bug_Report",   "🐛", "Report"),
+        ("/Admin",        "🔐", "Admin"),
+    ]
+
+    items = ""
+    for path, icon, label in pages:
+        slug = path.strip("/").lower().replace("_", " ")
+        is_active = (slug == current.lower()) or (path == "/" and current == "")
+        active_cls = " active" if is_active else ""
+        items += (
+            f'<a href="{path}{theme_param}" class="orc-nav-item{active_cls}">'
+            f'{icon}&nbsp;{label}</a>'
+        )
+
+    st.markdown(
+        f'<nav class="orc-navbar">'
+        f'<span class="orc-nav-logo">ORC</span>'
+        f'{items}'
+        f'</nav>',
+        unsafe_allow_html=True,
+    )
 
 
 def footer_html(extra: str = "") -> str:

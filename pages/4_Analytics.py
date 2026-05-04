@@ -15,11 +15,13 @@ from utils.security import execute_query
 from utils.hf_data import get_active_researchers, load_publications
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    metric_card_html, footer_html, chart_layout, chart_colors, DARK, LIGHT
+    metric_card_html, footer_html, chart_layout, chart_colors, render_navbar, DARK, LIGHT
 )
 
-st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide",
+                   initial_sidebar_state="collapsed")
 apply_styles()
+render_navbar("analytics")
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

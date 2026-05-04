@@ -121,7 +121,8 @@ _BASE_CSS = """
 html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, sans-serif !important; }
 
 /* ── Layout ─────────────────────────────────────────── */
-.block-container { padding-top: 1.5rem !important; max-width: 1200px !important; }
+.block-container,
+[data-testid="stMainBlockContainer"] { padding-top: 1.5rem !important; max-width: 1200px !important; }
 
 /* ── Card ───────────────────────────────────────────── */
 .orc-card {
@@ -228,15 +229,19 @@ hr { margin: 1.25rem 0 !important; }
 # ── Dark-mode overrides ───────────────────────────────────────────────────────
 _DARK_CSS = """
 <style>
-/* Global */
-.stApp                                  {{ background-color: {bg} !important; color: {text} !important; }}
-.stApp, .stApp p, .stApp span,
+/* Global — covers all known Streamlit 1.x container selectors */
+.stApp,
+[data-testid="stApp"]                   {{ background-color: {bg} !important; color: {text} !important; }}
+.stApp *, [data-testid="stApp"] *       {{ color: {text}; }}
+.stApp p, .stApp span,
 .stApp li, .stApp label                 {{ color: {text} !important; }}
 .stApp h1,.stApp h2,.stApp h3,
 .stApp h4,.stApp h5,.stApp h6           {{ color: {text} !important; }}
 [data-testid="stAppViewContainer"]      {{ background-color: {bg} !important; }}
 [data-testid="stMain"]                  {{ background-color: {bg} !important; }}
-.main .block-container                  {{ background-color: {bg} !important; }}
+[data-testid="stMainBlockContainer"]    {{ background-color: {bg} !important; }}
+.main, .main .block-container           {{ background-color: {bg} !important; }}
+body                                    {{ background-color: {bg} !important; }}
 
 /* Streamlit chrome */
 .stMetric label                         {{ color: {text2} !important; }}
@@ -301,15 +306,19 @@ hr                                      {{ border-color: {border} !important; op
 # ── Light-mode overrides ──────────────────────────────────────────────────────
 _LIGHT_CSS = """
 <style>
-/* Global */
-.stApp                                  {{ background-color: {bg} !important; color: {text} !important; }}
-.stApp, .stApp p, .stApp span,
+/* Global — covers all known Streamlit 1.x container selectors */
+.stApp,
+[data-testid="stApp"]                   {{ background-color: {bg} !important; color: {text} !important; }}
+.stApp *, [data-testid="stApp"] *       {{ color: {text}; }}
+.stApp p, .stApp span,
 .stApp li, .stApp label                 {{ color: {text} !important; }}
 .stApp h1,.stApp h2,.stApp h3,
 .stApp h4,.stApp h5,.stApp h6           {{ color: {text} !important; }}
 [data-testid="stAppViewContainer"]      {{ background-color: {bg} !important; }}
 [data-testid="stMain"]                  {{ background-color: {bg} !important; }}
-.main .block-container                  {{ background-color: {bg} !important; }}
+[data-testid="stMainBlockContainer"]    {{ background-color: {bg} !important; }}
+.main, .main .block-container           {{ background-color: {bg} !important; }}
+body                                    {{ background-color: {bg} !important; }}
 
 /* Streamlit chrome */
 .stMetric label                         {{ color: {text2} !important; }}

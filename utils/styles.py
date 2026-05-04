@@ -267,11 +267,30 @@ hr { margin: 1.25rem 0 !important; }
 
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 768px) {
-    .orc-hero { padding: 1.25rem; }
-    .orc-hero h1 { font-size: 1.35rem; }
-    .orc-metric .orc-metric-val { font-size: 1.5rem; }
-    .orc-pub { padding: 0.85rem 1rem 0.85rem 1.25rem; }
-    .block-container { padding-top: 1rem !important; }
+    .orc-hero { padding: 1.1rem; }
+    .orc-hero h1 { font-size: 1.25rem; }
+    .orc-hero p  { font-size: 0.8rem; }
+    .orc-metric  { padding: 0.85rem 0.6rem; }
+    .orc-metric .orc-metric-val  { font-size: 1.35rem; }
+    .orc-metric .orc-metric-icon { font-size: 1.05rem; }
+    .orc-pub { padding: 0.75rem 0.85rem 0.75rem 1rem; }
+    .block-container { padding-top: 0.75rem !important; padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+    .orc-card { padding: 0.75rem 0.9rem !important; }
+    /* Stack ALL Streamlit columns on small screens */
+    [data-testid="column"] {
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    /* Make buttons taller for easier tapping */
+    .stButton > button { min-height: 2.75rem !important; font-size: 0.9rem !important; }
+    /* Navbar compact */
+    .orc-nav-item { padding: 0.3rem 0.45rem !important; font-size: 0.72rem !important; }
+}
+@media (max-width: 480px) {
+    .orc-hero h1 { font-size: 1.1rem; }
+    .orc-section-title { font-size: 0.65rem !important; }
+    /* Wrap metric row */
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
 }
 </style>
 """

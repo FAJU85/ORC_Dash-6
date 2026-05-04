@@ -1,8 +1,10 @@
 """
 ORC Research Assistant — Paper Analysis & Chat
+Includes: structured quick actions, chat, result cache, and session export.
 """
 
 import json
+import datetime
 import streamlit as st
 import sys
 import os
@@ -42,12 +44,20 @@ def _card(content: str, border_color: str = "") -> str:
 
 
 def _tag(text: str) -> str:
-    """Render a pill/tag badge using theme colors — no dark-on-dark issues."""
     return (
         f'<span style="display:inline-block;background:{colors["surface2"]};'
         f'color:{colors["text"]};border:1px solid {colors["border"]};'
         f'border-radius:4px;padding:0.1rem 0.45rem;font-size:0.8rem;'
         f'margin:0.1rem 0.15rem 0.1rem 0">{escape(text)}</span>'
+    )
+
+
+def _label(text: str):
+    st.markdown(
+        f'<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:0.07em;color:{colors["text2"]};margin:0.75rem 0 0.25rem">'
+        f'{escape(text)}</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -116,6 +126,11 @@ def _paper_context(paper: dict) -> str:
         return ""
 
 
+def _paper_cache_key(paper: dict, action: str) -> str:
+    paper_id = str(paper.get("id", paper.get("title", "")[:30]))
+    return f"{paper_id}__{action}"
+
+
 def get_ai_response(message: str, paper: dict | None = None) -> tuple:
     try:
         req = AIRequest(message=message)
@@ -124,8 +139,7 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple:
     system = (
         "You are an expert academic research assistant. "
         "Be precise, concise, and professional. "
-        "Format your answers using clear paragraphs. "
-        "When listing items use plain numbered or bulleted lists, not code blocks."
+        "Format answers with clear paragraphs and plain numbered or bulleted lists."
     )
     if paper:
         system += _paper_context(paper)
@@ -153,6 +167,12 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple:
 
 
 def get_structured_response(action: str, paper: dict) -> tuple:
+    # Return cached result if available
+    cache_key = _paper_cache_key(paper, action)
+    if cache_key in st.session_state.get("ai_cache", {}):
+        cached = st.session_state["ai_cache"][cache_key]
+        return cached, None, None
+
     allowed, wait = _rate_check("structured")
     if not allowed:
         return None, None, f"Rate limit exceeded — wait {wait}s"
@@ -179,9 +199,77 @@ def get_structured_response(action: str, paper: dict) -> tuple:
         raw = resp.choices[0].message.content
         validated = parse_action_response(action, raw)
         log_audit("ai_structured", action)
+        # Store in cache
+        if validated:
+            st.session_state["ai_cache"][cache_key] = validated
         return validated, raw, None
     except Exception:
         return None, None, "AI service temporarily unavailable"
+
+
+# ── Export helpers ────────────────────────────────────────────────────────────
+
+def _result_to_markdown(action: str, result) -> str:
+    """Convert a structured result object to plain markdown text."""
+    label = {"summarize": "Summary", "findings": "Key Findings",
+              "methodology": "Methodology", "implications": "Implications"}.get(action, action.title())
+    lines = [f"## {label}", ""]
+    if isinstance(result, PaperSummary):
+        lines += [result.overview, ""]
+        lines += ["**Objectives**"] + [f"- {o}" for o in result.objectives] + [""]
+        lines += [f"**Methodology**\n{result.methods}", ""]
+        lines += ["**Key Results**"] + [f"- {r}" for r in result.results] + [""]
+        lines += [f"**Conclusion**\n{result.conclusion}"]
+    elif isinstance(result, KeyFindings):
+        for i, f in enumerate(result.findings, 1):
+            lines += [f"**Finding {i}:** {f}"]
+        lines += ["", f"**Significance:** {result.significance}"]
+        if result.limitations:
+            lines += ["", "**Limitations**"] + [f"- {l}" for l in result.limitations]
+    elif isinstance(result, Methodology):
+        lines += [f"**Study Design:** {result.study_design}", ""]
+        lines += [f"**Sample:** {result.sample}", ""]
+        lines += [f"**Analysis Method:** {result.analysis_method}"]
+        if result.tools:
+            lines += ["", "**Tools:** " + " · ".join(result.tools)]
+    elif isinstance(result, Implications):
+        if result.clinical:
+            lines += ["**Clinical**"] + [f"- {i}" for i in result.clinical] + [""]
+        if result.research:
+            lines += ["**Research**"] + [f"- {i}" for i in result.research] + [""]
+        if result.policy:
+            lines += ["**Policy**"] + [f"- {i}" for i in result.policy] + [""]
+        lines += ["", f"**Summary:** {result.summary}"]
+    return "\n".join(lines)
+
+
+def _build_export(paper: dict | None, ai_cache: dict, chat_history: list) -> str:
+    lines = ["# ORC Research Assistant — Session Export", ""]
+    lines += [f"*Exported: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}*", ""]
+
+    if paper:
+        lines += [
+            "---", "## Paper",
+            f"**Title:** {paper.get('title', '')}",
+            f"**Journal:** {paper.get('journal_name', '')}  "
+            f"**Year:** {paper.get('publication_year', '')}  "
+            f"**Citations:** {paper.get('citation_count', 0):,}",
+            "",
+        ]
+        # Include any cached analyses for this paper
+        pid = str(paper.get("id", paper.get("title", "")[:30]))
+        for action in ("summarize", "findings", "methodology", "implications"):
+            key = f"{pid}__{action}"
+            if key in ai_cache:
+                lines += [_result_to_markdown(action, ai_cache[key]), ""]
+
+    if chat_history:
+        lines += ["---", "## Chat History", ""]
+        for msg in chat_history:
+            role = "**You**" if msg["role"] == "user" else "**AI Assistant**"
+            lines += [f"{role}", msg["content"], ""]
+
+    return "\n".join(lines)
 
 
 # ── Structured result renderers ───────────────────────────────────────────────
@@ -189,15 +277,6 @@ def get_structured_response(action: str, paper: dict) -> tuple:
 def _bullet(items: list):
     for item in items:
         st.markdown(f"- {item}")
-
-
-def _label(text: str):
-    st.markdown(
-        f'<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;'
-        f'letter-spacing:0.07em;color:{colors["text2"]};margin:0.75rem 0 0.25rem">'
-        f'{escape(text)}</div>',
-        unsafe_allow_html=True,
-    )
 
 
 def render_structured(result):
@@ -237,8 +316,9 @@ def render_structured(result):
         for i, f in enumerate(result.findings, 1):
             st.markdown(
                 _card(
-                    f'<div style="font-size:0.85rem;font-weight:600;color:{colors["text2"]};'
-                    f'margin-bottom:0.2rem">Finding {i}</div>'
+                    f'<div style="font-size:0.8rem;font-weight:700;color:{colors["text2"]};'
+                    f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem">'
+                    f'Finding {i}</div>'
                     f'<div style="font-size:0.9rem;color:{colors["text"]};line-height:1.65">'
                     f'{escape(f)}</div>',
                 ),
@@ -246,8 +326,9 @@ def render_structured(result):
             )
         st.markdown(
             _card(
-                f'<div style="font-size:0.85rem;font-weight:600;color:{colors["text2"]};'
-                f'margin-bottom:0.2rem">Significance</div>'
+                f'<div style="font-size:0.8rem;font-weight:700;color:{colors["text2"]};'
+                f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem">'
+                f'Significance</div>'
                 f'<div style="font-size:0.9rem;color:{colors["text"]};line-height:1.65">'
                 f'{escape(result.significance)}</div>',
                 border_color=colors["accent"],
@@ -282,9 +363,10 @@ def render_structured(result):
             )
             if result.tools:
                 _label("Tools & Software")
-                tags_html = " ".join(_tag(t) for t in result.tools)
                 st.markdown(
-                    f'<div style="margin-top:0.15rem">{tags_html}</div>',
+                    f'<div style="margin-top:0.15rem">'
+                    + " ".join(_tag(t) for t in result.tools)
+                    + '</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -308,7 +390,13 @@ def render_structured(result):
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-for key, val in [("chat_history", []), ("pending_action", None)]:
+for key, val in [
+    ("chat_history", []),
+    ("pending_action", None),
+    ("ai_cache", {}),
+    ("last_action_label", ""),
+    ("last_action_result", None),
+]:
     if key not in st.session_state:
         st.session_state[key] = val
 
@@ -317,7 +405,7 @@ for key, val in [("chat_history", []), ("pending_action", None)]:
 
 st.markdown(
     hero_html("🔬 AI Research Assistant",
-              "Structured analysis and Q&A for your research papers"),
+              "Structured analysis and Q&A — results are remembered within your session"),
     unsafe_allow_html=True,
 )
 
@@ -368,6 +456,22 @@ else:
 # ── Quick Actions ─────────────────────────────────────────────────────────────
 
 st.markdown(section_title_html("Quick Actions"), unsafe_allow_html=True)
+
+# Show cache status badge when results are already saved
+if paper:
+    pid = str(paper.get("id", paper.get("title", "")[:30]))
+    cached_actions = [a for a in ("summarize", "findings", "methodology", "implications")
+                      if f"{pid}__{a}" in st.session_state["ai_cache"]]
+    if cached_actions:
+        badge_labels = {"summarize": "Summary", "findings": "Findings",
+                        "methodology": "Methodology", "implications": "Implications"}
+        tags = " ".join(_tag(badge_labels[a]) for a in cached_actions)
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:{colors["text2"]};margin-bottom:0.5rem">'
+            f'✓ Saved in session: {tags}</div>',
+            unsafe_allow_html=True,
+        )
+
 qa1, qa2, qa3, qa4 = st.columns(4)
 for col, label, action in [
     (qa1, "📝 Summarize",    "summarize"),
@@ -383,14 +487,27 @@ if st.session_state.pending_action and paper:
     action = st.session_state.pending_action
     st.session_state.pending_action = None
     labels = {
-        "summarize":   "📝 Summary",
-        "findings":    "🔍 Key Findings",
-        "methodology": "📊 Methodology",
+        "summarize":    "📝 Summary",
+        "findings":     "🔍 Key Findings",
+        "methodology":  "📊 Methodology",
         "implications": "🔗 Implications",
     }
-    st.markdown(section_title_html(labels.get(action, action.title())), unsafe_allow_html=True)
-    with st.spinner("Analyzing…"):
+    label = labels.get(action, action.title())
+    st.markdown(section_title_html(label), unsafe_allow_html=True)
+
+    # Check if result is already cached
+    cache_key = _paper_cache_key(paper, action)
+    is_cached = cache_key in st.session_state["ai_cache"]
+
+    if is_cached:
+        st.caption("✓ Loaded from session cache — no API call needed")
+
+    with st.spinner("Analyzing…" if not is_cached else ""):
         validated, raw, error = get_structured_response(action, paper)
+
+    st.session_state.last_action_label = label
+    st.session_state.last_action_result = validated
+
     if error:
         st.warning(f"⚠️ {error}")
     elif validated:
@@ -409,11 +526,35 @@ if st.session_state.pending_action and paper:
 
 st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
 
-ch_col, cl_col = st.columns([8, 1])
-with cl_col:
+# Row: message count + clear + export
+ctrl1, ctrl2, ctrl3 = st.columns([5, 1, 1])
+with ctrl1:
+    if st.session_state.chat_history:
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:{colors["text2"]};padding-top:0.4rem">'
+            f'{len(st.session_state.chat_history)} messages in this session</div>',
+            unsafe_allow_html=True,
+        )
+with ctrl2:
     if st.session_state.chat_history and st.button("🗑️ Clear", use_container_width=True):
         st.session_state.chat_history = []
         st.rerun()
+with ctrl3:
+    has_content = bool(st.session_state.chat_history or st.session_state.get("ai_cache"))
+    if has_content:
+        export_md = _build_export(
+            paper,
+            st.session_state.get("ai_cache", {}),
+            st.session_state.chat_history,
+        )
+        st.download_button(
+            label="📥 Save",
+            data=export_md.encode("utf-8"),
+            file_name=f"research_session_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.md",
+            mime="text/markdown",
+            use_container_width=True,
+            help="Download chat + all AI analyses as a Markdown file",
+        )
 
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):

@@ -298,7 +298,7 @@ for pub in page_items:
             st.switch_page("pages/2_AI_Assistant.py")
 
         if doi:
-            st.link_button("🔗 DOI", f"https://doi.org/{doi}", use_container_width=True)
+            st.link_button("🔗 View", f"https://doi.org/{doi}", use_container_width=True)
 
 # ── Pagination Controls ─────────────────────────────────────────────────────
 if total_pages > 1:

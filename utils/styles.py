@@ -321,7 +321,8 @@ hr                                      {{ border-color: {border} !important; op
 [data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
+.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
+.orc-card *  {{ color: {text} !important; }}
 .orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}
@@ -413,7 +414,8 @@ hr                                      {{ border-color: {border} !important; op
 [data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
+.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
+.orc-card *  {{ color: {text} !important; }}
 .orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}

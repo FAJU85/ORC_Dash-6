@@ -49,6 +49,7 @@ for key, default in [
     ("otp_expiry", None),
     ("login_email", None),
     ("otp_via_telegram", False),
+    ("otp_tg_error", ""),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -122,11 +123,12 @@ if not st.session_state.admin_authenticated:
                 st.session_state.otp_expiry  = datetime.now() + timedelta(minutes=5)
                 st.session_state.login_email = email
 
-                # Try Telegram first; wait up to 10 s before falling back
-                tg_result = {"ok": False}
+                # Try Telegram first; wait up to 10 s
+                tg_result = {"ok": False, "err": ""}
                 def _tg_send():
-                    ok, _ = send_otp_email(email, otp)
+                    ok, err = send_otp_email(email, otp)
                     tg_result["ok"] = ok
+                    tg_result["err"] = err or ""
 
                 t = threading.Thread(target=_tg_send, daemon=True)
                 t.start()
@@ -135,6 +137,7 @@ if not st.session_state.admin_authenticated:
 
                 st.session_state.otp_sent         = True
                 st.session_state.otp_via_telegram = tg_result["ok"]
+                st.session_state.otp_tg_error     = tg_result["err"]
                 if tg_result["ok"]:
                     log_audit("otp_telegram_sent", email[:20])
                 else:
@@ -155,12 +158,36 @@ if not st.session_state.admin_authenticated:
         if st.session_state.get("otp_via_telegram"):
             st.success("✅ Verification code sent to your Telegram bot.")
         else:
-            _tg_configured = bool(
-                get_secret("TELEGRAM_RELAY_URL")
-                or (get_nested_secret("telegram", "bot_token") and get_nested_secret("telegram", "admin_chat_id"))
+            _has_token = bool(
+                get_secret("TELEGRAM_BOT_TOKEN")
+                or get_nested_secret("telegram", "bot_token", "")
             )
+            _has_chat  = bool(
+                get_secret("TELEGRAM_CHAT_ID")
+                or get_nested_secret("telegram", "admin_chat_id", "")
+            )
+            _has_relay = bool(get_secret("TELEGRAM_RELAY_URL"))
+            _tg_configured = _has_relay or _has_token
+
             if _tg_configured:
-                st.error("❌ Could not reach Telegram. Check bot/relay configuration and try again.")
+                tg_err = st.session_state.get("otp_tg_error", "")
+                if "CHAT_ID_NOT_CONFIGURED" in tg_err:
+                    st.warning(
+                        "⚠️ Bot token is set but no Chat ID found yet.\n\n"
+                        "**Fix:** Open your Telegram app, send any message to the bot "
+                        "(e.g. type `/start`), then come back and try logging in again. "
+                        "The system will auto-detect your Chat ID."
+                    )
+                elif tg_err:
+                    st.error(f"❌ Telegram error: `{tg_err}`")
+                else:
+                    st.error("❌ Could not deliver OTP via Telegram.")
+                st.markdown(
+                    f'<div style="font-size:0.8rem;color:{colors["muted"]};margin-top:0.5rem">'
+                    f'Go to <strong>Admin → Settings → Telegram Notifications</strong> '
+                    f'and click <em>Send Test Message</em> to diagnose the connection.</div>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.warning("⚠️ Telegram not configured. Demo mode — code shown for testing only:")
                 st.info(f"🔐 **{st.session_state.otp_code}**")

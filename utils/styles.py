@@ -115,6 +115,7 @@ _BASE_CSS = """
 /* ── Hide Streamlit chrome ──────────────────────────── */
 #MainMenu, footer, .stDeployButton  { visibility: hidden !important; display: none !important; }
 [data-testid="stToolbar"]           { display: none !important; }
+[data-testid="stHeader"]            { display: none !important; }
 [data-testid="stSidebarNav"]        { display: none !important; }
 [data-testid="collapsedControl"]    { display: none !important; }
 section[data-testid="stSidebar"]    { display: none !important; }

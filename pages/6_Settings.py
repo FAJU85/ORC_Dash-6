@@ -190,12 +190,14 @@ def _conn_card(label, ok, ok_txt, fail_txt):
     Returns:
         html (str): An HTML fragment representing a themed status card containing the label and the selected message colored according to status.
     """
-    c = colors["success"] if ok else colors["warning"]
+    status_color = colors["success"] if ok else colors["warning"]
     txt = ok_txt if ok else fail_txt
     return (
-        f'<div class="orc-card" style="padding:0.9rem 1.25rem">'
-        f'<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.2rem">{label}</div>'
-        f'<div style="font-size:0.78rem;color:{c}">{txt}</div>'
+        f'<div style="background:{colors["surface"]};border-radius:6px;'
+        f'padding:0.9rem 1.25rem;margin-bottom:0.65rem;color:{colors["text"]}">'
+        f'<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.2rem;'
+        f'color:{colors["text"]}">{label}</div>'
+        f'<div style="font-size:0.78rem;color:{status_color}">{txt}</div>'
         f'</div>'
     )
 

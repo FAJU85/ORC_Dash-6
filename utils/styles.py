@@ -243,6 +243,11 @@ hr { margin: 1.25rem 0 !important; }
 [data-testid="stChatMessage"] { border-radius: 8px !important; }
 [data-testid="stExpander"]    { border-radius: 8px !important; }
 .streamlit-expanderHeader { font-size: 0.85rem !important; font-weight: 600 !important; }
+/* Chat input bar — prevent black bar in light mode */
+[data-testid="stBottom"],
+[data-testid="stBottom"] > div,
+[data-testid="stChatInputContainer"],
+[data-testid="stChatInputContainer"] > div { border-radius: 8px !important; }
 [data-testid="stMetricValue"] {
     font-size: 1.75rem !important; font-weight: 700 !important;
     letter-spacing: -0.02em !important;
@@ -262,11 +267,30 @@ hr { margin: 1.25rem 0 !important; }
 
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 768px) {
-    .orc-hero { padding: 1.25rem; }
-    .orc-hero h1 { font-size: 1.35rem; }
-    .orc-metric .orc-metric-val { font-size: 1.5rem; }
-    .orc-pub { padding: 0.85rem 1rem 0.85rem 1.25rem; }
-    .block-container { padding-top: 1rem !important; }
+    .orc-hero { padding: 1.1rem; }
+    .orc-hero h1 { font-size: 1.25rem; }
+    .orc-hero p  { font-size: 0.8rem; }
+    .orc-metric  { padding: 0.85rem 0.6rem; }
+    .orc-metric .orc-metric-val  { font-size: 1.35rem; }
+    .orc-metric .orc-metric-icon { font-size: 1.05rem; }
+    .orc-pub { padding: 0.75rem 0.85rem 0.75rem 1rem; }
+    .block-container { padding-top: 0.75rem !important; padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+    .orc-card { padding: 0.75rem 0.9rem !important; }
+    /* Stack ALL Streamlit columns on small screens */
+    [data-testid="column"] {
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    /* Make buttons taller for easier tapping */
+    .stButton > button { min-height: 2.75rem !important; font-size: 0.9rem !important; }
+    /* Navbar compact */
+    .orc-nav-item { padding: 0.3rem 0.45rem !important; font-size: 0.72rem !important; }
+}
+@media (max-width: 480px) {
+    .orc-hero h1 { font-size: 1.1rem; }
+    .orc-section-title { font-size: 0.65rem !important; }
+    /* Wrap metric row */
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
 }
 </style>
 """
@@ -347,7 +371,19 @@ hr                                      {{ border-color: {border} !important; op
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
 
-/* Navbar — dark mode */
+/* Chat input bar */
+[data-testid="stBottom"]            {{ background: {bg} !important; }}
+[data-testid="stBottom"] > div      {{ background: {bg} !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
+
+/* Chat messages */
+[data-testid="stChatMessage"]       {{ background: {surface} !important; }}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
+
+/* Navbar */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}
 .orc-nav-logo {{ color: {text} !important; border-right-color: {border}; }}
 .orc-nav-item {{ color: {text2} !important; }}
@@ -439,6 +475,18 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Alert/info boxes */
 [data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+
+/* Chat input bar */
+[data-testid="stBottom"]            {{ background: {bg} !important; }}
+[data-testid="stBottom"] > div      {{ background: {bg} !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
+
+/* Chat messages */
+[data-testid="stChatMessage"]       {{ background: {surface} !important; }}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
 
 /* Navbar — light mode */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}

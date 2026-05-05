@@ -113,13 +113,12 @@ with col1:
         fig.add_scatter(x=year_counts["publication_year"], y=year_counts["cumulative"],
                         name="Cumulative", mode="lines+markers",
                         line=dict(color=ccs[1], width=2), yaxis="y2")
-        fig.update_layout(
-            **chart_layout("Publications by Year"),
-            yaxis2=dict(overlaying="y", side="right",
-                        tickfont=dict(color=colors["text2"]),
-                        title_font=dict(color=colors["text2"])),
-            legend=dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)"),
-        )
+        _ly = chart_layout("Publications by Year")
+        _ly["yaxis2"] = dict(overlaying="y", side="right",
+                             tickfont=dict(color=colors["text2"]),
+                             title_font=dict(color=colors["text2"]))
+        _ly["legend"] = dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(**_ly)
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
@@ -129,8 +128,7 @@ with col2:
         fig = px.area(year_cit, x="publication_year", y="citation_count",
                       labels={"publication_year": "Year", "citation_count": "Citations"},
                       color_discrete_sequence=[ccs[2]])
-        fig.update_traces(line_color=ccs[2], fillcolor=ccs[2].rstrip(")") + ",0.15)"
-                          if ccs[2].startswith("rgb") else ccs[2] + "26")
+        fig.update_traces(line_color=ccs[2], opacity=0.7)
         fig.update_layout(**chart_layout("Citation Impact by Year"))
         st.plotly_chart(fig, use_container_width=True)
 

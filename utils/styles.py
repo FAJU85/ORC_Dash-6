@@ -276,21 +276,17 @@ hr { margin: 1.25rem 0 !important; }
     .orc-pub { padding: 0.75rem 0.85rem 0.75rem 1rem; }
     .block-container { padding-top: 0.75rem !important; padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
     .orc-card { padding: 0.75rem 0.9rem !important; }
-    /* Stack ALL Streamlit columns on small screens */
-    [data-testid="column"] {
-        min-width: 100% !important;
-        flex: 1 1 100% !important;
-    }
-    /* Make buttons taller for easier tapping */
-    .stButton > button { min-height: 2.75rem !important; font-size: 0.9rem !important; }
+    /* Wrap columns to 2-per-row on mobile */
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+    [data-testid="column"] { min-width: 45% !important; flex: 1 1 45% !important; }
+    /* Slightly taller buttons for tap targets */
+    .stButton > button { min-height: 2.5rem !important; }
     /* Navbar compact */
     .orc-nav-item { padding: 0.3rem 0.45rem !important; font-size: 0.72rem !important; }
 }
 @media (max-width: 480px) {
     .orc-hero h1 { font-size: 1.1rem; }
     .orc-section-title { font-size: 0.65rem !important; }
-    /* Wrap metric row */
-    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
 }
 </style>
 """
@@ -565,6 +561,15 @@ def _esc(v) -> str:
     return escape("" if v is None else str(v), quote=True)
 
 
+def _safe_title(v) -> str:
+    """Escape HTML but preserve <sub> and <sup> tags (chemical formulas, etc.)."""
+    from html import escape
+    safe = escape("" if v is None else str(v), quote=False)
+    safe = safe.replace("&lt;sub&gt;", "<sub>").replace("&lt;/sub&gt;", "</sub>")
+    safe = safe.replace("&lt;sup&gt;", "<sup>").replace("&lt;/sup&gt;", "</sup>")
+    return safe
+
+
 def pub_card_html(title: str, authors: list, journal: str, year,
                   citations: int, is_oa: bool, abstract: str = "") -> str:
     auth_html = ""
@@ -591,7 +596,7 @@ def pub_card_html(title: str, authors: list, journal: str, year,
 
     return (
         f'<div class="orc-pub">'
-        f'  <div class="orc-pub-title">{_esc(title)}</div>'
+        f'  <div class="orc-pub-title">{_safe_title(title)}</div>'
         f'  {auth_html}'
         f'  <div class="orc-pub-meta" style="margin-top:0.3rem">📰 {_esc(journal)}</div>'
         f'  <div style="margin-top:0.45rem">{badges}</div>'

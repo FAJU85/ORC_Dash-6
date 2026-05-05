@@ -265,27 +265,26 @@ for pub in page_items:
     if not isinstance(authors, list):
         authors = []
 
-    col1, col2 = st.columns([5, 1])
+    pub_id = pub.get('id', title[:20])
 
-    with col1:
-        st.markdown(
-            pub_card_html(
-                title    = title[:160],
-                authors  = authors,
-                journal  = journal,
-                year     = year,
-                citations= citations,
-                is_oa    = bool(is_oa),
-                abstract = abstract if show_abstracts else "",
-            ),
-            unsafe_allow_html=True,
-        )
+    # Card — full width
+    st.markdown(
+        pub_card_html(
+            title    = title[:160],
+            authors  = authors,
+            journal  = journal,
+            year     = year,
+            citations= citations,
+            is_oa    = bool(is_oa),
+            abstract = abstract if show_abstracts else "",
+        ),
+        unsafe_allow_html=True,
+    )
 
-    with col2:
-        st.write("")
-        st.write("")
-        pub_id = pub.get('id', title[:20])
-        if st.button("🔬 Analyze", key=f"a_{pub_id}", use_container_width=True):
+    # Action buttons — compact row beneath the card
+    btn_cols = st.columns([2, 2, 6]) if doi else st.columns([2, 8])
+    with btn_cols[0]:
+        if st.button("🔬 Analyze", key=f"a_{pub_id}"):
             st.session_state.selected_paper = {
                 "id": pub_id,
                 "title": title,
@@ -297,8 +296,20 @@ for pub in page_items:
             log_audit("paper_selected", title[:50])
             st.switch_page("pages/2_AI_Assistant.py")
 
-        if doi:
-            st.link_button("🔗 View", f"https://doi.org/{doi}", use_container_width=True)
+    if doi:
+        with btn_cols[1]:
+            st.markdown(
+                f'<a href="https://doi.org/{doi}" target="_blank" '
+                f'style="display:inline-flex;align-items:center;gap:0.3rem;'
+                f'background:{colors["surface2"]};color:{colors["text"]};'
+                f'border:1px solid {colors["border"]};border-radius:6px;'
+                f'padding:0.35rem 0.75rem;text-decoration:none;'
+                f'font-size:0.82rem;font-weight:500;white-space:nowrap">'
+                f'🔗 View</a>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown('<div style="margin-bottom:0.5rem"></div>', unsafe_allow_html=True)
 
 # ── Pagination Controls ─────────────────────────────────────────────────────
 if total_pages > 1:

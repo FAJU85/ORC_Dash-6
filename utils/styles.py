@@ -88,18 +88,20 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
     base = {
         "plot_bgcolor":  "rgba(0,0,0,0)",
         "paper_bgcolor": "rgba(0,0,0,0)",
-        "font":   {"color": c["text2"], "family": "Inter, system-ui, sans-serif", "size": 12},
+        "font":   {"color": c["text"], "family": "Inter, system-ui, sans-serif", "size": 13},
         "xaxis":  {
             "gridcolor": c["border"], "linecolor": c["border"],
-            "tickcolor": c["border"], "tickfont": {"color": c["text2"]},
-            "title_font": {"color": c["text2"]},
+            "tickcolor": c["border"],
+            "tickfont": {"color": c["text"], "size": 12},
+            "title_font": {"color": c["text"], "size": 13},
         },
         "yaxis":  {
             "gridcolor": c["border"], "linecolor": c["border"],
-            "tickcolor": c["border"], "tickfont": {"color": c["text2"]},
-            "title_font": {"color": c["text2"]},
+            "tickcolor": c["border"],
+            "tickfont": {"color": c["text"], "size": 12},
+            "title_font": {"color": c["text"], "size": 13},
         },
-        "legend": {"font": {"color": c["text2"]}, "bgcolor": "rgba(0,0,0,0)"},
+        "legend": {"font": {"color": c["text"], "size": 12}, "bgcolor": "rgba(0,0,0,0)"},
         "margin": {"l": 8, "r": 8, "t": 36 if title else 12, "b": 8},
         "hoverlabel": {
             "bgcolor": c["surface2"], "font_color": c["text"],
@@ -109,7 +111,7 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
     if title:
         base["title"] = {
             "text": title,
-            "font": {"color": c["text"], "size": 14, "family": "Inter, sans-serif"},
+            "font": {"color": c["text"], "size": 15, "family": "Inter, sans-serif"},
             "x": 0, "xanchor": "left", "pad": {"l": 4},
         }
     if height:
@@ -387,9 +389,32 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Chat messages */
 [data-testid="stChatMessage"]       {{ background: {surface} !important; }}
-[data-testid="stChatMessage"] p,
-[data-testid="stChatMessage"] li,
-[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
+[data-testid="stChatMessage"] *     {{ color: {text} !important; }}
+[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 3px !important; padding: 0.1rem 0.35rem !important; }}
+[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 6px !important; padding: 0.65rem !important; }}
+
+/* Markdown containers */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] strong,
+[data-testid="stMarkdownContainer"] em     {{ color: {text} !important; }}
+[data-testid="stText"]                     {{ color: {text} !important; }}
+[data-testid="stCaption"]                  {{ color: {text2} !important; }}
+
+/* Dropdown popover items */
+[data-baseweb="menu"]                      {{ background: {surface2} !important; }}
+[data-baseweb="menu"] li,
+[data-baseweb="option"]                    {{ background: {surface2} !important; color: {text} !important; }}
+
+/* Toggle / checkbox labels */
+[data-testid="stToggle"] label,
+[data-testid="stCheckbox"] label,
+[data-testid="stRadio"] label              {{ color: {text} !important; }}
+
+/* Select slider value */
+[data-testid="stSlider"] [data-testid="stTickBarMin"],
+[data-testid="stSlider"] [data-testid="stTickBarMax"] {{ color: {text2} !important; }}
 
 /* Navbar */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}
@@ -492,9 +517,28 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Chat messages */
 [data-testid="stChatMessage"]       {{ background: {surface} !important; }}
-[data-testid="stChatMessage"] p,
-[data-testid="stChatMessage"] li,
-[data-testid="stChatMessage"] span  {{ color: {text} !important; }}
+[data-testid="stChatMessage"] *     {{ color: {text} !important; }}
+[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 3px !important; padding: 0.1rem 0.35rem !important; }}
+[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 6px !important; padding: 0.65rem !important; }}
+
+/* Markdown containers */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] strong,
+[data-testid="stMarkdownContainer"] em     {{ color: {text} !important; }}
+[data-testid="stText"]                     {{ color: {text} !important; }}
+[data-testid="stCaption"]                  {{ color: {text2} !important; }}
+
+/* Dropdown popover items */
+[data-baseweb="menu"]                      {{ background: {surface2} !important; }}
+[data-baseweb="menu"] li,
+[data-baseweb="option"]                    {{ background: {surface2} !important; color: {text} !important; }}
+
+/* Toggle / checkbox / radio labels */
+[data-testid="stToggle"] label,
+[data-testid="stCheckbox"] label,
+[data-testid="stRadio"] label              {{ color: {text} !important; }}
 
 /* Navbar — light mode */
 .orc-navbar  {{ background: {surface} !important; border-bottom-color: {border}; }}

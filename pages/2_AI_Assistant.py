@@ -111,6 +111,25 @@ def _render_ai_chart(kind: str):
         st.info("Chart data not available for the current selection.")
 
 
+def _detect_chart_intent(message: str) -> str | None:
+    """Return chart slug if the message is asking for a visualization, else None."""
+    msg = message.lower()
+    words = set(msg.replace(",", " ").replace(".", " ").split())
+    chart_words = {"chart", "graph", "plot", "histogram", "visualize",
+                   "visualization", "diagram", "figure", "draw", "show"}
+    if not (words & chart_words):
+        return None
+    if any(w in msg for w in ("year", "trend", "time", "annual", "history", "over")):
+        return "trend"
+    if any(w in msg for w in ("citation", "cited", "cites", "impact", "h-index")):
+        return "citations"
+    if any(w in msg for w in ("journal", "venue", "publisher")):
+        return "journals"
+    if any(w in msg for w in ("open access", "open-access", "access", " oa")):
+        return "access"
+    return "trend"
+
+
 # ── AI client ─────────────────────────────────────────────────────────────────
 
 def _groq_client():
@@ -181,7 +200,8 @@ def _paper_cache_key(paper: dict, action: str) -> str:
     return f"{paper_id}__{action}"
 
 
-def get_ai_response(message: str, paper: dict | None = None) -> tuple:
+def get_ai_response(message: str, paper: dict | None = None,
+                    chart_kind: str | None = None) -> tuple:
     try:
         req = AIRequest(message=message)
     except ValidationError as e:
@@ -191,6 +211,19 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple:
         "Be precise, concise, and professional. "
         "Format answers with clear paragraphs and plain numbered or bulleted lists."
     )
+    if chart_kind:
+        _chart_labels = {
+            "trend": "publications by year",
+            "citations": "citation count distribution",
+            "journals": "top journals breakdown",
+            "access": "open access vs subscription ratio",
+        }
+        system += (
+            f"\n\nA visual interactive {_chart_labels.get(chart_kind, 'data chart')} "
+            "has been generated and is displayed to the user below your response. "
+            "Briefly explain what the chart shows and what key patterns or insights "
+            "to look for. Do NOT draw ASCII art, text tables, or any text-based charts."
+        )
     if paper:
         system += _paper_context(paper)
 
@@ -635,6 +668,8 @@ with ctrl3:
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if msg.get("chart_kind"):
+            _render_ai_chart(msg["chart_kind"])
 
 if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
     try:
@@ -643,15 +678,22 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
         st.error(f"❌ {e.errors()[0]['msg']}")
         st.stop()
 
+    chart_kind = _detect_chart_intent(req.message)
+
     st.session_state.chat_history.append({"role": "user", "content": req.message})
     with st.chat_message("user"):
         st.markdown(req.message)
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
-            response, error = get_ai_response(req.message, paper)
+            response, error = get_ai_response(req.message, paper, chart_kind)
         if response:
             st.markdown(response)
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            if chart_kind:
+                _render_ai_chart(chart_kind)
+            ai_msg: dict = {"role": "assistant", "content": response}
+            if chart_kind:
+                ai_msg["chart_kind"] = chart_kind
+            st.session_state.chat_history.append(ai_msg)
         else:
             st.warning(f"⚠️ {error}")
     st.rerun()

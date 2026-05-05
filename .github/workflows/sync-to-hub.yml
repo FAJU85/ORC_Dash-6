@@ -3,7 +3,12 @@ name: Sync to Hugging Face
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:           # Manual trigger from any branch
+    inputs:
+      branch:
+        description: 'Branch to sync (default: main)'
+        required: false
+        default: 'main'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -17,6 +22,7 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Sync to Hugging Face
         uses: huggingface/hub-sync@v0.1.0

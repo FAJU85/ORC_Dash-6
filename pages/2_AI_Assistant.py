@@ -211,6 +211,22 @@ def get_ai_response(message: str, paper: dict | None = None,
         "Be precise, concise, and professional. "
         "Format answers with clear paragraphs and plain numbered or bulleted lists."
     )
+
+    # ── RAG: inject relevant publications from the database ───────────────────
+    try:
+        from utils.rag import retrieve, format_context
+        all_pubs, _ = execute_query("SELECT * FROM publications")
+        if all_pubs:
+            retrieved = retrieve(message, all_pubs, top_k=3)
+            rag_ctx   = format_context(retrieved)
+            if rag_ctx:
+                system += rag_ctx
+                st.session_state["_rag_retrieved"] = retrieved
+        else:
+            st.session_state["_rag_retrieved"] = []
+    except Exception:
+        st.session_state["_rag_retrieved"] = []
+
     if chart_kind:
         _chart_labels = {
             "trend": "publications by year",
@@ -480,6 +496,8 @@ for key, val in [
     ("last_action_label", ""),
     ("last_action_result", None),
     ("ai_active_chart", None),
+    ("_rag_retrieved", []),
+    ("_rag_index_cache", {}),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -503,6 +521,27 @@ if not _ai_available:
         "⚠️ AI service not configured — add an **AI_API_KEY** or **GROQ_API_KEY** secret. "
         "Charts and export still work below."
     )
+
+# RAG status banner
+try:
+    from utils.rag import index_kind
+    from utils.security import execute_query as _eq
+    _rag_pubs, _ = _eq("SELECT * FROM publications")
+    _rag_count   = len(_rag_pubs) if _rag_pubs else 0
+    if _rag_count:
+        _kind = index_kind(_rag_pubs)
+        _kind_label = {"neural": "🧠 Neural (sentence-transformers)",
+                       "tfidf":  "🔤 Keyword (TF-IDF fallback)",
+                       "empty":  "⚠️ Unavailable"}.get(_kind, _kind)
+        st.markdown(
+            f'<div style="background:{colors["surface"]};border-radius:6px;'
+            f'padding:0.5rem 1rem;margin-bottom:0.75rem;font-size:0.8rem;'
+            f'border-left:3px solid {colors["success"]};color:{colors["text2"]}">'
+            f'📚 RAG active — {_rag_count} publications indexed · {_kind_label}</div>',
+            unsafe_allow_html=True,
+        )
+except Exception:
+    pass
 
 
 # ── Paper context card ────────────────────────────────────────────────────────
@@ -670,6 +709,8 @@ for msg in st.session_state.chat_history:
         st.markdown(msg["content"])
         if msg.get("chart_kind"):
             _render_ai_chart(msg["chart_kind"])
+        if msg.get("rag_count") and msg["role"] == "assistant":
+            st.caption(f"📚 {msg['rag_count']} paper(s) retrieved from your database")
 
 if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
     try:
@@ -690,9 +731,20 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
             st.markdown(response)
             if chart_kind:
                 _render_ai_chart(chart_kind)
+            # RAG indicator
+            retrieved = st.session_state.get("_rag_retrieved", [])
+            if retrieved:
+                titles = " · ".join(
+                    f'"{p.get("title", "")[:45]}…"' if len(p.get("title", "")) > 45
+                    else f'"{p.get("title", "")}"'
+                    for p in retrieved
+                )
+                st.caption(f"📚 Context from your database ({len(retrieved)} papers): {titles}")
             ai_msg: dict = {"role": "assistant", "content": response}
             if chart_kind:
                 ai_msg["chart_kind"] = chart_kind
+            if retrieved:
+                ai_msg["rag_count"] = len(retrieved)
             st.session_state.chat_history.append(ai_msg)
         else:
             st.warning(f"⚠️ {error}")

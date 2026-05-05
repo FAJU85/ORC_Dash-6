@@ -99,6 +99,8 @@ def _get_cached_index(publications: list) -> dict:
 def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
     """
     Return the top_k publications most semantically relevant to *query*.
+    Phase 2: similarity scores are multiplied by per-paper feedback boost
+    scores before ranking, so historically helpful papers rank higher.
     Returns an empty list if RAG is unavailable or no publications exist.
     """
     if not query or not publications:
@@ -112,6 +114,24 @@ def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
 
     k = min(top_k, len(pubs))
 
+    # Load feedback boost scores (non-critical — silently ignored on error)
+    boosts: dict = {}
+    try:
+        from utils.rag_feedback import boost_scores
+        boosts = boost_scores(pubs)
+    except Exception:
+        pass
+
+    def _apply_boosts(scores: np.ndarray) -> np.ndarray:
+        if not boosts:
+            return scores
+        out = scores.copy()
+        for i, pub in enumerate(pubs):
+            pid = pub.get("id", "")
+            if pid in boosts:
+                out[i] *= boosts[pid]
+        return out
+
     if kind == "neural":
         model = _load_neural_model()
         if not model:
@@ -120,6 +140,7 @@ def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
         scores = (index["embeddings"] @ q_emb.T).squeeze()
         if scores.ndim == 0:
             return [pubs[0]]
+        scores  = _apply_boosts(scores)
         top_idx = np.argsort(scores)[::-1][:k].tolist()
         return [pubs[i] for i in top_idx]
 
@@ -127,6 +148,7 @@ def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
         from sklearn.metrics.pairwise import cosine_similarity
         q_vec  = index["vec"].transform([query])
         scores = cosine_similarity(index["mat"], q_vec).squeeze()
+        scores  = _apply_boosts(scores)
         top_idx = np.argsort(scores)[::-1][:k].tolist()
         return [pubs[i] for i in top_idx]
 

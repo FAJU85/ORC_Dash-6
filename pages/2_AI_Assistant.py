@@ -130,6 +130,26 @@ def _detect_chart_intent(message: str) -> str | None:
     return "trend"
 
 
+def _handle_feedback(msg_idx: int, rating: int) -> None:
+    """Save 👍/👎 feedback for the assistant message at msg_idx then rerun."""
+    from utils.rag_feedback import record, invalidate_boost_cache
+    chat = st.session_state.chat_history
+
+    # Walk backwards to find the user query that preceded this response
+    query = ""
+    for j in range(msg_idx - 1, -1, -1):
+        if chat[j]["role"] == "user":
+            query = chat[j]["content"]
+            break
+
+    pub_ids = chat[msg_idx].get("rag_pub_ids", [])
+    sid     = st.session_state.get("session_token", "anonymous")
+    record(query, pub_ids, rating, sid)
+    invalidate_boost_cache()
+    st.session_state[f"_fb_{msg_idx}"] = rating
+    st.rerun()
+
+
 # ── AI client ─────────────────────────────────────────────────────────────────
 
 def _groq_client():
@@ -522,22 +542,31 @@ if not _ai_available:
         "Charts and export still work below."
     )
 
-# RAG status banner
+# RAG + feedback status banner
 try:
     from utils.rag import index_kind
+    from utils.rag_feedback import stats as _fb_stats
     from utils.security import execute_query as _eq
     _rag_pubs, _ = _eq("SELECT * FROM publications")
     _rag_count   = len(_rag_pubs) if _rag_pubs else 0
     if _rag_count:
         _kind = index_kind(_rag_pubs)
-        _kind_label = {"neural": "🧠 Neural (sentence-transformers)",
-                       "tfidf":  "🔤 Keyword (TF-IDF fallback)",
-                       "empty":  "⚠️ Unavailable"}.get(_kind, _kind)
+        _kind_label = {
+            "neural": "🧠 Neural",
+            "tfidf":  "🔤 TF-IDF fallback",
+            "empty":  "⚠️ Unavailable",
+        }.get(_kind, _kind)
+        _fb  = _fb_stats()
+        _fb_part = (
+            f" · 📊 {_fb['total']} ratings ({_fb['ratio']}% helpful)"
+            if _fb["total"] > 0 else ""
+        )
         st.markdown(
             f'<div style="background:{colors["surface"]};border-radius:6px;'
             f'padding:0.5rem 1rem;margin-bottom:0.75rem;font-size:0.8rem;'
             f'border-left:3px solid {colors["success"]};color:{colors["text2"]}">'
-            f'📚 RAG active — {_rag_count} publications indexed · {_kind_label}</div>',
+            f'📚 RAG active — {_rag_count} papers indexed · {_kind_label}{_fb_part}'
+            f'</div>',
             unsafe_allow_html=True,
         )
 except Exception:
@@ -690,6 +719,11 @@ with ctrl2:
 with ctrl3:
     has_content = bool(st.session_state.chat_history or st.session_state.get("ai_cache"))
     if has_content:
+        try:
+            from utils.rag_feedback import flush_now as _flush_fb
+            _flush_fb()
+        except Exception:
+            pass
         export_md = _build_export(
             paper,
             st.session_state.get("ai_cache", {}),
@@ -704,13 +738,28 @@ with ctrl3:
             help="Download chat + all AI analyses as a Markdown file",
         )
 
-for msg in st.session_state.chat_history:
+for _i, msg in enumerate(st.session_state.chat_history):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("chart_kind"):
             _render_ai_chart(msg["chart_kind"])
         if msg.get("rag_count") and msg["role"] == "assistant":
             st.caption(f"📚 {msg['rag_count']} paper(s) retrieved from your database")
+
+    # ── Feedback buttons (assistant messages only) ────────────────────────────
+    if msg["role"] == "assistant" and _ai_available:
+        _fb_key = f"_fb_{_i}"
+        _rating = st.session_state.get(_fb_key)
+        if _rating is None:
+            _fc1, _fc2, _fc3 = st.columns([1, 1, 10])
+            with _fc1:
+                if st.button("👍", key=f"fbup_{_i}", help="Helpful"):
+                    _handle_feedback(_i, 1)
+            with _fc2:
+                if st.button("👎", key=f"fbdn_{_i}", help="Not helpful"):
+                    _handle_feedback(_i, -1)
+        else:
+            st.caption("✓ Helpful" if _rating == 1 else "✓ Feedback noted")
 
 if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
     try:
@@ -744,7 +793,8 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
             if chart_kind:
                 ai_msg["chart_kind"] = chart_kind
             if retrieved:
-                ai_msg["rag_count"] = len(retrieved)
+                ai_msg["rag_count"]   = len(retrieved)
+                ai_msg["rag_pub_ids"] = [p.get("id", "") for p in retrieved]
             st.session_state.chat_history.append(ai_msg)
         else:
             st.warning(f"⚠️ {error}")

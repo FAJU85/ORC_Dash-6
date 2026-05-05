@@ -29,10 +29,8 @@ from utils.styles import (
     footer_html, render_navbar, DARK, LIGHT
 )
 
-st.set_page_config(page_title="Admin", page_icon="🔐", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("admin")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
@@ -420,21 +418,21 @@ else:
         sc1.markdown(
             f'<div class="orc-card" style="padding:0.75rem 1rem">'
             f'<div style="font-size:0.75rem;color:{colors["text2"]}">BOT TOKEN</div>'
-            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if tg_token else colors["warning"]}">'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{colors["success"] if tg_token else colors["warning"]}">'
             f'{"✅ Configured" if tg_token else "⚠️ Missing"}</div>'
             f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_BOT_TOKEN</div>'
             f'</div>', unsafe_allow_html=True)
         sc2.markdown(
             f'<div class="orc-card" style="padding:0.75rem 1rem">'
             f'<div style="font-size:0.75rem;color:{colors["text2"]}">CHAT ID</div>'
-            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if tg_chat_id else colors["warning"]}">'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{colors["success"] if tg_chat_id else colors["warning"]}">'
             f'{"✅ Configured" if tg_chat_id else "⚠️ Missing"}</div>'
             f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_CHAT_ID</div>'
             f'</div>', unsafe_allow_html=True)
         sc3.markdown(
             f'<div class="orc-card" style="padding:0.75rem 1rem">'
             f'<div style="font-size:0.75rem;color:{colors["text2"]}">RELAY</div>'
-            f'<div style="font-weight:600;font-size:0.82rem;color:{"" + colors["success"] if relay_url else colors["muted"]}">'
+            f'<div style="font-weight:600;font-size:0.82rem;color:{colors["success"] if relay_url else colors["muted"]}">'
             f'{"✅ Active" if relay_url else "— Not used"}</div>'
             f'<div style="font-size:0.72rem;color:{colors["muted"]};margin-top:0.2rem">Secret: TELEGRAM_RELAY_URL</div>'
             f'</div>', unsafe_allow_html=True)

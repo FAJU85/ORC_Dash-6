@@ -13,10 +13,8 @@ from utils.security import sanitize_string, validate_email, log_audit, RateLimit
 from utils.email_service import send_bug_report_notification, create_github_issue
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, DARK, LIGHT
 
-st.set_page_config(page_title="Bug Report", page_icon="🐛", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("report")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

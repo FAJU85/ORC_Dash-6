@@ -26,10 +26,8 @@ from utils.ai_schemas import (
     PaperSummary, KeyFindings, Methodology, Implications,
 )
 
-st.set_page_config(page_title="AI Assistant", page_icon="🔬", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("ai assistant")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 rate_limiter = RateLimiter()

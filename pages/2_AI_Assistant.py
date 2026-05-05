@@ -6,6 +6,8 @@ Includes: structured quick actions, chat, result cache, and session export.
 import json
 import datetime
 import streamlit as st
+import pandas as pd
+import plotly.express as px
 import sys
 import os
 from html import escape
@@ -13,10 +15,11 @@ from html import escape
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic import ValidationError
-from utils.security import get_secret, log_audit, log_error, RateLimiter
+from utils.security import get_secret, execute_query, log_audit, log_error, RateLimiter
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    footer_html, render_navbar, DARK, LIGHT
+    footer_html, render_navbar, DARK, LIGHT,
+    chart_layout, chart_colors, PLOTLY_CONFIG,
 )
 from utils.ai_schemas import (
     AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
@@ -38,7 +41,8 @@ def _card(content: str, border_color: str = "") -> str:
     border = f"border-left:4px solid {border_color};" if border_color else ""
     return (
         f'<div style="background:{colors["surface"]};border-radius:6px;'
-        f'padding:1rem 1.25rem;margin-bottom:0.65rem;color:{colors["text"]};{border}">'
+        f'padding:1rem 1.25rem;margin-bottom:0.65rem;color:{colors["text"]};'
+        f'overflow:hidden;overflow-wrap:break-word;word-wrap:break-word;{border}">'
         f'{content}</div>'
     )
 
@@ -59,6 +63,52 @@ def _label(text: str):
         f'{escape(text)}</div>',
         unsafe_allow_html=True,
     )
+
+
+# ── Quick chart renderer ───────────────────────────────────────────────────────
+
+def _render_ai_chart(kind: str):
+    pubs, _ = execute_query("SELECT * FROM publications ORDER BY publication_year")
+    if not pubs:
+        st.info("No publication data available. Sync from the Publications page first.")
+        return
+    df = pd.DataFrame(pubs)
+    ccs = chart_colors()
+
+    if kind == "trend" and "publication_year" in df.columns:
+        yc = df.groupby("publication_year").size().reset_index(name="count")
+        fig = px.bar(yc, x="publication_year", y="count",
+                     labels={"publication_year": "Year", "count": "Publications"},
+                     color_discrete_sequence=[colors["accent"]])
+        fig.update_layout(**chart_layout("Publications by Year"))
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    elif kind == "citations" and "citation_count" in df.columns:
+        df["citation_count"] = pd.to_numeric(df["citation_count"], errors="coerce").fillna(0)
+        fig = px.histogram(df, x="citation_count", nbins=20,
+                           labels={"citation_count": "Citations", "count": "Papers"},
+                           color_discrete_sequence=[colors["accent2"]])
+        fig.update_layout(**chart_layout("Citation Distribution"))
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    elif kind == "journals" and "journal_name" in df.columns:
+        jc = df["journal_name"].value_counts().head(8).reset_index()
+        jc.columns = ["journal", "count"]
+        fig = px.pie(jc, values="count", names="journal",
+                     color_discrete_sequence=ccs, hole=0.4)
+        fig.update_layout(**chart_layout("Top Journals"))
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    elif kind == "access" and "open_access" in df.columns:
+        df["open_access"] = df["open_access"].astype(str).str.lower().isin({"1", "true", "yes"})
+        oa = int(df["open_access"].sum())
+        fig = px.pie(values=[oa, len(df) - oa], names=["Open Access", "Subscription"],
+                     color_discrete_sequence=[colors["success"], colors["muted"]], hole=0.4)
+        fig.update_layout(**chart_layout("Open Access Distribution"))
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+    else:
+        st.info("Chart data not available for the current selection.")
 
 
 # ── AI client ─────────────────────────────────────────────────────────────────
@@ -396,6 +446,7 @@ for key, val in [
     ("ai_cache", {}),
     ("last_action_label", ""),
     ("last_action_result", None),
+    ("ai_active_chart", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -413,9 +464,12 @@ api_key = (
     get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
     or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
 )
-if not api_key:
-    st.error("AI service not configured. Add an AI_API_KEY secret.")
-    st.stop()
+_ai_available = bool(api_key)
+if not _ai_available:
+    st.warning(
+        "⚠️ AI service not configured — add an **AI_API_KEY** or **GROQ_API_KEY** secret. "
+        "Charts and export still work below."
+    )
 
 
 # ── Paper context card ────────────────────────────────────────────────────────
@@ -480,7 +534,7 @@ for col, label, action in [
     (qa4, "🔗 Implications", "implications"),
 ]:
     with col:
-        if st.button(label, use_container_width=True, disabled=not paper):
+        if st.button(label, use_container_width=True, disabled=not paper or not _ai_available):
             st.session_state.pending_action = action
 
 if st.session_state.pending_action and paper:
@@ -522,6 +576,28 @@ if st.session_state.pending_action and paper:
         )
 
 
+# ── Quick Charts ─────────────────────────────────────────────────────────────
+
+st.markdown(section_title_html("Quick Charts"), unsafe_allow_html=True)
+
+qc1, qc2, qc3, qc4 = st.columns(4)
+for _col, _lbl, _knd in [
+    (qc1, "📅 By Year",     "trend"),
+    (qc2, "📈 Citations",   "citations"),
+    (qc3, "📰 Journals",    "journals"),
+    (qc4, "🔓 Open Access", "access"),
+]:
+    with _col:
+        if st.button(_lbl, key=f"qc_{_knd}", use_container_width=True):
+            if st.session_state["ai_active_chart"] == _knd:
+                st.session_state["ai_active_chart"] = None
+            else:
+                st.session_state["ai_active_chart"] = _knd
+
+if st.session_state["ai_active_chart"]:
+    _render_ai_chart(st.session_state["ai_active_chart"])
+
+
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
 st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
@@ -560,7 +636,7 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if user_input := st.chat_input("Ask about your research papers…"):
+if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
     try:
         req = AIRequest(message=user_input)
     except ValidationError as e:

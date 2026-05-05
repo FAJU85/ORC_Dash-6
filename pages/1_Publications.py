@@ -282,9 +282,9 @@ for pub in page_items:
     )
 
     # Action buttons — compact row beneath the card
-    btn_cols = st.columns([2, 2, 6]) if doi else st.columns([2, 8])
+    btn_cols = st.columns([1, 2, 7]) if doi else st.columns([1, 9])
     with btn_cols[0]:
-        if st.button("🔬 Analyze", key=f"a_{pub_id}"):
+        if st.button("🔬", key=f"a_{pub_id}", help="Analyze with AI Assistant"):
             st.session_state.selected_paper = {
                 "id": pub_id,
                 "title": title,

@@ -205,9 +205,13 @@ def _conn_card(label, ok, ok_txt, fail_txt):
 oa_ok = check_openalex_status()
 
 cc1, cc2, cc3 = st.columns(3)
-cc1.markdown(_conn_card("Database",    is_db_configured(),                                          "Connected",  "Not configured"), unsafe_allow_html=True)
-cc2.markdown(_conn_card("AI Service",  bool(get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")), "Available", "Not configured"), unsafe_allow_html=True)
-cc3.markdown(_conn_card("Data Source",  oa_ok,                                                        "Online",    "Unavailable"),    unsafe_allow_html=True)
+_ai_key = bool(
+    get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
+    or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
+)
+cc1.markdown(_conn_card("Database",    is_db_configured(), "Connected",  "Not configured"), unsafe_allow_html=True)
+cc2.markdown(_conn_card("AI Service",  _ai_key,            "Available",  "Not configured — add AI_API_KEY or GROQ_API_KEY secret"), unsafe_allow_html=True)
+cc3.markdown(_conn_card("Data Source", oa_ok,              "Online",     "Unavailable"),    unsafe_allow_html=True)
 
 # ── About ───────────────────────────────────────────────────────────────────
 st.markdown(section_title_html("About"), unsafe_allow_html=True)

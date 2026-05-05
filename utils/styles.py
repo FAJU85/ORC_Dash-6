@@ -65,6 +65,14 @@ def chart_colors() -> list:
     ]
 
 
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+    "toImageButtonOptions": {"format": "png", "filename": "orc_chart", "scale": 2},
+}
+
+
 def chart_layout(title: str = "", height: int = 0) -> dict:
     """
     Builds a Plotly layout dictionary configured for the current theme.
@@ -113,12 +121,16 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
 _BASE_CSS = """
 <style>
 /* ── Hide Streamlit chrome ──────────────────────────── */
-#MainMenu, footer, .stDeployButton  { visibility: hidden !important; display: none !important; }
-[data-testid="stToolbar"]           { display: none !important; }
-[data-testid="stHeader"]            { display: none !important; }
-[data-testid="stSidebarNav"]        { display: none !important; }
-[data-testid="collapsedControl"]    { display: none !important; }
-section[data-testid="stSidebar"]    { display: none !important; }
+#MainMenu, footer, .stDeployButton          { visibility: hidden !important; display: none !important; }
+[data-testid="stToolbar"]                   { display: none !important; }
+[data-testid="stHeader"]                    { display: none !important; }
+[data-testid="stSidebarNav"]                { display: none !important; }
+[data-testid="collapsedControl"]            { display: none !important; }
+[data-testid="stSidebarCollapsedControl"]   { display: none !important; }
+[data-testid="stSidebarOpenButton"]         { display: none !important; }
+[data-testid="stDecoration"]                { display: none !important; }
+button[aria-label="Open sidebar"]           { display: none !important; }
+section[data-testid="stSidebar"]            { display: none !important; }
 
 /* ── Typography ─────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

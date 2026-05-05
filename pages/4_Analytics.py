@@ -18,7 +18,8 @@ from utils.security import execute_query
 from utils.hf_data import get_active_researchers, load_publications
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
-    metric_card_html, footer_html, chart_layout, chart_colors, render_navbar, DARK, LIGHT
+    metric_card_html, footer_html, chart_layout, chart_colors,
+    render_navbar, DARK, LIGHT, PLOTLY_CONFIG,
 )
 
 st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide",
@@ -119,7 +120,7 @@ with col1:
                              title_font=dict(color=colors["text2"]))
         _ly["legend"] = dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)")
         fig.update_layout(**_ly)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col2:
     if "publication_year" in df.columns and "citation_count" in df.columns:
@@ -130,7 +131,7 @@ with col2:
                       color_discrete_sequence=[ccs[2]])
         fig.update_traces(line_color=ccs[2], opacity=0.7)
         fig.update_layout(**chart_layout("Citation Impact by Year"))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # ── Most Cited Papers ────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ if "citation_count" in df.columns:
     layout["height"] = 400
     layout["coloraxis_showscale"] = False
     fig.update_layout(**layout)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # ── Journal & Open Access ────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ with col1:
                      color_discrete_sequence=ccs, hole=0.4)
         fig.update_layout(**chart_layout("Top Journals"))
         fig.update_traces(textfont_color=colors["text"])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col2:
     if "open_access" in df.columns:
@@ -175,7 +176,7 @@ with col2:
                      hole=0.4)
         fig.update_layout(**chart_layout("Open Access"))
         fig.update_traces(textfont_color=colors["text"])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # ── Citation Distribution ────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ if "citation_count" in df.columns:
                            labels={"citation_count": "Citations", "count": "Papers"},
                            color_discrete_sequence=[ccs[3]])
         fig.update_layout(**chart_layout("Distribution of Citations per Paper"))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     with col2:
         if "publication_year" in df.columns:
             fig = px.scatter(df, x="publication_year", y="citation_count",
@@ -195,7 +196,7 @@ if "citation_count" in df.columns:
                              labels={"publication_year": "Year", "citation_count": "Citations"},
                              color_discrete_sequence=[ccs[0]])
             fig.update_layout(**chart_layout("Citations vs. Publication Year"))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # ── Keyword Frequency ────────────────────────────────────────────────────────
@@ -230,7 +231,7 @@ if "title" in df.columns:
         layout["height"] = 500
         layout["coloraxis_showscale"] = False
         fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # ── Author Collaboration Network ─────────────────────────────────────────────
@@ -316,7 +317,7 @@ try:
 
         fig = go.Figure(data=edge_traces + [node_trace])
         fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         st.caption(
             f"{len(G.nodes)} authors · {len(G.edges)} co-authorship links — "
             "node size reflects number of collaborations"

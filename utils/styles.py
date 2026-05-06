@@ -594,7 +594,7 @@ hr                                      {{ border-color: {border} !important; op
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def apply_styles():
+def apply_styles() -> None:
     """
     Inject global CSS into the current page.
     Must be called on every page after set_page_config().
@@ -733,13 +733,11 @@ def theme_toggle_html() -> str:
     return "☀️ Light" if get_theme() == "dark" else "🌙 Dark"
 
 
-def render_navbar(current: str = "") -> None:
+def render_navbar() -> None:
     """
     Render a horizontal top navigation bar using st.page_link() for true SPA
     routing (no full page reload on navigation). Includes the theme toggle so
     it is available on every page without repeating code in each page file.
-    `current` is accepted for backwards compatibility but is no longer used;
-    Streamlit marks the active page automatically via aria-current="page".
     """
     _PAGES = [
         ("pages/0_Home.py",         "🏠", "Home"),

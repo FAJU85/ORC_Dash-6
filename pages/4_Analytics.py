@@ -62,6 +62,11 @@ if not pubs:
 
 df = pd.DataFrame(pubs)
 
+# Ensure authors are always a list, even if stored as JSON string
+if "authors" in df.columns:
+    df["authors"] = df["authors"].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+    df["authors"] = df["authors"].apply(lambda x: x if isinstance(x, list) else [])
+
 if "citation_count" in df.columns:
     df["citation_count"] = pd.to_numeric(df["citation_count"], errors="coerce").fillna(0)
 if "open_access" in df.columns:

@@ -30,7 +30,7 @@ _error_log: list = []           # in-memory error log (all sessions)
 # SECURE SECRET ACCESS
 # ============================================
 
-def get_secret(key, default=""):
+def get_secret(key: str, default: str = "") -> str:
     """Safely get a secret value - works with both local st.secrets and HF Spaces env vars"""
     try:
         val = os.environ.get(key, None)
@@ -44,7 +44,7 @@ def get_secret(key, default=""):
     except Exception:
         return default
 
-def get_nested_secret(section, key, default=""):
+def get_nested_secret(section: str, key: str, default: str = "") -> str:
     """Safely get nested secret like [researcher].name"""
     try:
         env_key = f"{section}_{key}".upper()
@@ -62,7 +62,9 @@ def get_nested_secret(section, key, default=""):
 # INPUT VALIDATION
 # ============================================
 
-def sanitize_string(value, max_length=500):
+from typing import Any # Added for execute_query and sanitize_string
+
+def sanitize_string(value: Any, max_length: int = 500) -> str:
     """Sanitize string input to prevent injection"""
     if not value:
         return ""
@@ -71,21 +73,21 @@ def sanitize_string(value, max_length=500):
     value = value[:max_length]
     return value
 
-def validate_orcid(orcid):
+def validate_orcid(orcid: str | None) -> bool:
     """Validate ORCID format (0000-0000-0000-0000)"""
     if not orcid:
         return False
     pattern = r'^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$'
     return bool(re.match(pattern, orcid))
 
-def validate_email(email):
+def validate_email(email: str | None) -> bool:
     """Validate email format"""
     if not email:
         return False
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email))
 
-def validate_otp(otp):
+def validate_otp(otp: Any) -> bool:
     """Validate OTP format (6 digits)"""
     if not otp:
         return False
@@ -95,7 +97,7 @@ def validate_otp(otp):
 # PASSWORD SECURITY
 # ============================================
 
-def hash_password(password):
+def hash_password(password: str) -> str:
     """Hash password using bcrypt with random salt"""
     try:
         import bcrypt
@@ -105,7 +107,7 @@ def hash_password(password):
         warnings.warn('bcrypt not installed — falling back to SHA-256. Install bcrypt for production use.', RuntimeWarning, stacklevel=2)
         return hashlib.sha256(password.encode()).hexdigest()
 
-def verify_password(password, stored_hash):
+def verify_password(password: str, stored_hash: str) -> bool:
     """
     Verify password against stored hash.
     Supports both bcrypt (new) and SHA-256 (legacy) hashes.
@@ -121,11 +123,11 @@ def verify_password(password, stored_hash):
     # Legacy SHA-256 fallback
     return hashlib.sha256(password.encode()).hexdigest() == stored_hash
 
-def generate_otp():
+def generate_otp() -> str:
     """Generate secure 6-digit OTP"""
     return ''.join([str(secrets.randbelow(10)) for _ in range(6)])
 
-def generate_session_token():
+def generate_session_token() -> str:
     """Generate secure session token"""
     return secrets.token_urlsafe(32)
 
@@ -139,7 +141,7 @@ class RateLimiter:
     across all user sessions within the same server process.
     """
 
-    def is_allowed(self, key, max_attempts=5, window_seconds=300):
+    def is_allowed(self, key: str, max_attempts: int = 5, window_seconds: int = 300) -> tuple[bool, int]:
         """Check if action is allowed within rate limit"""
         now = time.time()
         with _rate_limit_lock:
@@ -158,7 +160,7 @@ class RateLimiter:
             _rate_limit_store[key] = data
             return True, 0
 
-    def record_attempt(self, key):
+    def record_attempt(self, key: str) -> None:
         """Record an attempt"""
         now = time.time()
         with _rate_limit_lock:
@@ -166,7 +168,7 @@ class RateLimiter:
                 _rate_limit_store[key] = {'attempts': [], 'blocked_until': 0}
             _rate_limit_store[key]['attempts'].append(now)
 
-    def reset(self, key):
+    def reset(self, key: str) -> None:
         """Reset rate limit for a key"""
         with _rate_limit_lock:
             _rate_limit_store.pop(key, None)
@@ -175,7 +177,7 @@ class RateLimiter:
 # AUDIT LOGGING (module-level, shared across sessions)
 # ============================================
 
-def log_audit(action, details="", user="anonymous"):
+def log_audit(action: str, details: str = "", user: str = "anonymous") -> None:
     """Log security-relevant actions to the module-level audit log"""
     entry = {
         'timestamp': datetime.now().isoformat(),
@@ -195,12 +197,12 @@ def log_audit(action, details="", user="anonymous"):
     except Exception:
         pass
 
-def get_audit_log():
+def get_audit_log() -> list[dict]:
     """Return the current in-memory audit log (newest last)"""
     with _audit_lock:
         return list(_audit_log)
 
-def load_audit_log_from_hf():
+def load_audit_log_from_hf() -> None:
     """Load persisted audit log from HF Dataset into the module-level list"""
     try:
         from utils.hf_data import load_audit_log as hf_load
@@ -240,7 +242,7 @@ def log_error(error_type: str, message: str, page: str = "") -> None:
         pass
 
 
-def get_error_log() -> list:
+def get_error_log() -> list[dict]:
     """Return the current in-memory error log."""
     with _error_lock:
         return list(_error_log)
@@ -274,7 +276,7 @@ def load_error_log_from_hf() -> None:
 # DATABASE ACCESS (Hugging Face Datasets)
 # ============================================
 
-def is_db_configured():
+def is_db_configured() -> bool:
     """Check if Hugging Face is properly configured"""
     try:
         from utils.hf_data import is_hf_configured
@@ -282,7 +284,7 @@ def is_db_configured():
     except Exception:
         return False
 
-def execute_query(sql, params=None):
+def execute_query(sql: str, params: Any | None = None) -> tuple[list[dict] | None, str | None]:
     """Execute a query using Hugging Face Datasets"""
     try:
         from utils.hf_data import execute_query as hf_execute_query
@@ -295,18 +297,18 @@ def execute_query(sql, params=None):
 # SESSION SECURITY
 # ============================================
 
-def init_session():
+def init_session() -> None:
     """Initialize secure session state"""
     if 'session_initialized' not in st.session_state:
         st.session_state.session_initialized = True
         st.session_state.session_token = generate_session_token()
         st.session_state.session_start = datetime.now().isoformat()
 
-def is_admin_authenticated():
+def is_admin_authenticated() -> bool:
     """Check if admin is authenticated in this session"""
     return st.session_state.get('admin_authenticated', False)
 
-def admin_logout():
+def admin_logout() -> None:
     """Securely logout admin"""
     log_audit("admin_logout")
     st.session_state.admin_authenticated = False

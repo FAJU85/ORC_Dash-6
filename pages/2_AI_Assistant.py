@@ -10,11 +10,15 @@ import pandas as pd
 import plotly.express as px
 import sys
 import os
-from html import escape
+import html # Using module for escape
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic import ValidationError
+from utils.ai_schemas import (
+    AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
+    PaperSummary, KeyFindings, Methodology, Implications,
+)
 from utils.security import get_secret, execute_query, log_audit, log_error, RateLimiter
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
@@ -50,7 +54,7 @@ def _tag(text: str) -> str:
         f'<span style="display:inline-block;background:{colors["surface2"]};'
         f'color:{colors["text"]};border:1px solid {colors["border"]};'
         f'border-radius:4px;padding:0.1rem 0.45rem;font-size:0.8rem;'
-        f'margin:0.1rem 0.15rem 0.1rem 0">{escape(text)}</span>'
+        f'margin:0.1rem 0.15rem 0.1rem 0">{html.escape(text)}</span>'
     )
 
 
@@ -58,14 +62,14 @@ def _label(text: str):
     st.markdown(
         f'<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;'
         f'letter-spacing:0.07em;color:{colors["text2"]};margin:0.75rem 0 0.25rem">'
-        f'{escape(text)}</div>',
+        f'{html.escape(text)}</div>',
         unsafe_allow_html=True,
     )
 
 
 # ── Quick chart renderer ───────────────────────────────────────────────────────
 
-def _render_ai_chart(kind: str):
+def _render_ai_chart(kind: str) -> None:
     pubs, _ = execute_query("SELECT * FROM publications ORDER BY publication_year")
     if not pubs:
         st.info("No publication data available. Sync from the Publications page first.")
@@ -150,7 +154,7 @@ def _handle_feedback(msg_idx: int, rating: int) -> None:
 
 # ── AI client ─────────────────────────────────────────────────────────────────
 
-def _groq_client():
+def _groq_client() -> tuple[object | None, str | None]: # Groq client object or None, error string or None
     api_key = (
         get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
         or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
@@ -164,7 +168,7 @@ def _groq_client():
         return None, "AI library not available"
 
 
-def _rate_check(key: str, max_req: int = 20) -> tuple:
+def _rate_check(key: str, max_req: int = 20) -> tuple[bool, int]:
     sid = st.session_state.get("session_token", "default")
     allowed, wait = rate_limiter.is_allowed(f"ai_{sid}_{key}", max_req, 60)
     if allowed:
@@ -173,7 +177,7 @@ def _rate_check(key: str, max_req: int = 20) -> tuple:
 
 
 def _call_ai(system: str, user: str, json_mode: bool = False,
-             temperature: float = 0.5, max_tokens: int = 1800) -> tuple:
+             temperature: float = 0.5, max_tokens: int = 1800) -> tuple[str | None, str | None]:
     allowed, wait = _rate_check("general")
     if not allowed:
         return None, f"Rate limit exceeded — wait {wait}s"
@@ -219,7 +223,7 @@ def _paper_cache_key(paper: dict, action: str) -> str:
 
 
 def get_ai_response(message: str, paper: dict | None = None,
-                    chart_kind: str | None = None) -> tuple:
+                    chart_kind: str | None = None) -> tuple[str | None, str | None]:
     try:
         req = AIRequest(message=message)
     except ValidationError as e:
@@ -283,7 +287,7 @@ def get_ai_response(message: str, paper: dict | None = None,
         return None, "AI service temporarily unavailable"
 
 
-def get_structured_response(action: str, paper: dict) -> tuple:
+def get_structured_response(action: str, paper: dict) -> tuple[PaperSummary | KeyFindings | Methodology | Implications | None, str | None, str | None]:
     # Return cached result if available
     cache_key = _paper_cache_key(paper, action)
     if cache_key in st.session_state.get("ai_cache", {}):
@@ -391,17 +395,17 @@ def _build_export(paper: dict | None, ai_cache: dict, chat_history: list) -> str
 
 # ── Structured result renderers ───────────────────────────────────────────────
 
-def _bullet(items: list):
+def _bullet(items: list) -> None:
     for item in items:
         st.markdown(f"- {item}")
 
 
-def render_structured(result):
+def render_structured(result: PaperSummary | KeyFindings | Methodology | Implications) -> None:
     if isinstance(result, PaperSummary):
         st.markdown(
             _card(
                 f'<div style="font-size:0.9rem;line-height:1.7;color:{colors["text"]}">'
-                f'{escape(result.overview)}</div>',
+                f'{html.escape(result.overview)}</div>',
                 border_color=colors["accent"],
             ),
             unsafe_allow_html=True,
@@ -413,7 +417,7 @@ def render_structured(result):
             _label("Methodology")
             st.markdown(
                 f'<div style="font-size:0.87rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.methods)}</div>',
+                f'{html.escape(result.methods)}</div>',
                 unsafe_allow_html=True,
             )
         with c2:
@@ -423,7 +427,7 @@ def render_structured(result):
             st.markdown(
                 _card(
                     f'<div style="font-size:0.87rem;color:{colors["text"]};line-height:1.65">'
-                    f'{escape(result.conclusion)}</div>',
+                    f'{html.escape(result.conclusion)}</div>',
                     border_color=colors["success"],
                 ),
                 unsafe_allow_html=True,
@@ -437,7 +441,7 @@ def render_structured(result):
                     f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem">'
                     f'Finding {i}</div>'
                     f'<div style="font-size:0.9rem;color:{colors["text"]};line-height:1.65">'
-                    f'{escape(f)}</div>',
+                    f'{html.escape(f)}</div>',
                 ),
                 unsafe_allow_html=True,
             )
@@ -447,7 +451,7 @@ def render_structured(result):
                 f'text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem">'
                 f'Significance</div>'
                 f'<div style="font-size:0.9rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.significance)}</div>',
+                f'{html.escape(result.significance)}</div>',
                 border_color=colors["accent"],
             ),
             unsafe_allow_html=True,
@@ -462,20 +466,20 @@ def render_structured(result):
             _label("Study Design")
             st.markdown(
                 f'<div style="font-size:0.88rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.study_design)}</div>',
+                f'{html.escape(result.study_design)}</div>',
                 unsafe_allow_html=True,
             )
             _label("Sample")
             st.markdown(
                 f'<div style="font-size:0.88rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.sample)}</div>',
+                f'{html.escape(result.sample)}</div>',
                 unsafe_allow_html=True,
             )
         with c2:
             _label("Analysis Method")
             st.markdown(
                 f'<div style="font-size:0.88rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.analysis_method)}</div>',
+                f'{html.escape(result.analysis_method)}</div>',
                 unsafe_allow_html=True,
             )
             if result.tools:
@@ -498,7 +502,7 @@ def render_structured(result):
         st.markdown(
             _card(
                 f'<div style="font-size:0.9rem;color:{colors["text"]};line-height:1.65">'
-                f'{escape(result.summary)}</div>',
+                f'{html.escape(result.summary)}</div>',
                 border_color=colors["accent2"],
             ),
             unsafe_allow_html=True,
@@ -516,6 +520,7 @@ for key, val in [
     ("ai_active_chart", None),
     ("_rag_retrieved", []),
     ("_rag_index_cache", {}),
+    ("confirm_clear_chat", False), # Added for chat clear confirmation
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -581,9 +586,9 @@ if paper:
         st.markdown(
             _card(
                 f'<div style="font-weight:600;font-size:0.95rem;color:{colors["text"]}">'
-                f'{escape(str(paper.get("title", "Unknown")))}</div>'
+                f'{html.escape(str(paper.get("title", "Unknown")))}</div>'
                 f'<div style="font-size:0.8rem;color:{colors["text2"]};margin-top:0.25rem">'
-                f'📰 {escape(str(paper.get("journal_name", "")))} &nbsp;·&nbsp; '
+                f'📰 {html.escape(str(paper.get("journal_name", "")))} &nbsp;·&nbsp; '
                 f'{paper.get("publication_year", "")} &nbsp;·&nbsp; '
                 f'{citations:,} citations</div>',
                 border_color=colors["accent"],
@@ -669,7 +674,7 @@ if st.session_state.pending_action and paper:
         st.markdown(
             _card(
                 f'<div style="font-size:0.88rem;line-height:1.7;color:{colors["text"]}">'
-                f'{escape(raw)}</div>'
+                f'{html.escape(raw)}</div>'
             ),
             unsafe_allow_html=True,
         )
@@ -711,9 +716,22 @@ with ctrl1:
             unsafe_allow_html=True,
         )
 with ctrl2:
-    if st.session_state.chat_history and st.button("🗑️ Clear", use_container_width=True):
-        st.session_state.chat_history = []
-        st.rerun()
+    if st.session_state.chat_history:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.confirm_clear_chat = True
+
+    if st.session_state.get("confirm_clear_chat"):
+        st.warning("Are you sure you want to clear the entire chat history? This action cannot be undone.")
+        col_chat_c1, col_chat_c2 = st.columns(2)
+        with col_chat_c1:
+            if st.button("Confirm Clear Chat", key="confirm_clear_chat_yes", type="secondary", use_container_width=True):
+                st.session_state.chat_history = []
+                st.session_state.confirm_clear_chat = False
+                st.rerun()
+        with col_chat_c2:
+            if st.button("Cancel Clear Chat", key="confirm_clear_chat_no", use_container_width=True):
+                st.session_state.confirm_clear_chat = False
+                st.rerun()
 with ctrl3:
     has_content = bool(st.session_state.chat_history or st.session_state.get("ai_cache"))
     if has_content:

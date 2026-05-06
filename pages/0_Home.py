@@ -71,12 +71,7 @@ else:
 st.markdown(section_title_html("System Status"), unsafe_allow_html=True)
 
 
-def _dot(ok: bool) -> str:
-    c = colors["success"] if ok else colors["warning"]
-    return f'<span class="orc-dot" style="background:{c}"></span>'
-
-
-def _status_block(icon, label, ok, detail):
+def _status_block(icon: str, label: str, ok: bool, detail: str) -> str:
     dot = _dot(ok)
     msg = "Connected" if ok else detail
     return (

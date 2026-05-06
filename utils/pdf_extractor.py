@@ -8,11 +8,18 @@ import io
 from typing import Optional
 
 
-def extract_text(file_bytes: bytes) -> tuple:
+_MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def extract_text(file_bytes: bytes) -> tuple[str, str]:
     """
     Extract all text from a PDF file.
     Returns (text, error). Error is empty string on success.
     """
+    if len(file_bytes) > _MAX_PDF_BYTES:
+        mb = len(file_bytes) // (1024 * 1024)
+        return "", f"PDF too large ({mb} MB). Maximum allowed is 50 MB."
+
     # Try PyMuPDF first (fastest, best quality)
     try:
         import fitz  # PyMuPDF
@@ -47,7 +54,7 @@ def extract_text(file_bytes: bytes) -> tuple:
     )
 
 
-def _find_section(text_lower: str, text: str, keywords: list, max_len: int = 1500) -> str:
+def _find_section(text_lower: str, text: str, keywords: list[str], max_len: int = 1500) -> str:
     """Find the first matching section keyword and return its content."""
     for kw in keywords:
         idx = text_lower.find(kw)
@@ -58,7 +65,7 @@ def _find_section(text_lower: str, text: str, keywords: list, max_len: int = 150
     return ""
 
 
-def extract_sections(text: str) -> dict:
+def extract_sections(text: str) -> dict[str, str]:
     """
     Heuristically split a research paper into its canonical sections.
     Returns a dict with keys: abstract, introduction, methods, results, conclusions.
@@ -101,7 +108,7 @@ def extract_sections(text: str) -> dict:
     return sections
 
 
-def extract_metadata(text: str) -> dict:
+def extract_metadata(text: str) -> dict[str, str]:
     """Try to pull title, authors and DOI from the first page."""
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     title = lines[0][:200] if lines else ""
@@ -110,7 +117,7 @@ def extract_metadata(text: str) -> dict:
     return {"title": title, "doi": doi}
 
 
-def build_ai_prompt(sections: dict, max_chars: int = 3000) -> str:
+def build_ai_prompt(sections: dict[str, str], max_chars: int = 3000) -> str:
     """Build a condensed prompt string from extracted sections."""
     parts = []
     for name, content in sections.items():
@@ -120,7 +127,9 @@ def build_ai_prompt(sections: dict, max_chars: int = 3000) -> str:
 
 # ── Slide generation ──────────────────────────────────────────────────────────
 
-def generate_slides(title: str, sections: dict, ai_summary: Optional[dict] = None) -> bytes:
+from typing import Any # Added for generate_slides type hint
+
+def generate_slides(title: str, sections: dict[str, str], ai_summary: Optional[dict[str, Any]] = None) -> bytes:
     """
     Generate a PowerPoint (.pptx) from paper sections and optional AI summary.
     Returns the file bytes, or empty bytes if python-pptx is not installed.

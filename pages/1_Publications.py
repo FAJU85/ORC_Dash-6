@@ -6,6 +6,7 @@ import streamlit as st
 import json
 import sys
 import os
+import html # Added for escaping DOI in links
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -33,7 +34,7 @@ rate_limiter = RateLimiter()
 # SYNC FUNCTION
 # ============================================
 
-def sync_publications(orcid):
+def sync_publications(orcid: str) -> tuple[int, str | None]:
     """
     Synchronize a researcher's publications from OpenAlex using their ORCID.
     
@@ -122,6 +123,17 @@ if not pubs:
     )
     st.stop()
 
+# Ensure authors are always a list, even if stored as JSON string
+for p in pubs:
+    authors_data = p.get("authors")
+    if isinstance(authors_data, str):
+        try:
+            p["authors"] = json.loads(authors_data)
+        except json.JSONDecodeError:
+            p["authors"] = []
+    elif not isinstance(authors_data, list):
+        p["authors"] = []
+
 # ── Filters ─────────────────────────────────────────────────────────────────
 st.markdown(section_title_html("Publication List"), unsafe_allow_html=True)
 
@@ -153,7 +165,7 @@ if selected_researcher != "All Researchers" and selected_researcher in researche
 
 if search:
     q = sanitize_string(search, 100).lower()
-    def _matches(p):
+    def _matches(p: dict) -> bool:
         """
         Check whether the current query string `q` appears in key text fields of a publication record.
         
@@ -297,7 +309,7 @@ for pub in page_items:
     if doi:
         with btn_cols[1]:
             st.markdown(
-                f'<a href="https://doi.org/{doi}" target="_blank" '
+                f'<a href="https://doi.org/{html.escape(doi)}" target="_blank" '
                 f'style="display:inline-flex;align-items:center;gap:0.3rem;'
                 f'background:{colors["surface2"]};color:{colors["text"]};'
                 f'border:1px solid {colors["border"]};border-radius:6px;'

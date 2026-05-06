@@ -10,12 +10,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import (
-    get_secret, get_nested_secret, execute_query,
+    get_secret, get_nested_secret,
     is_db_configured,
 )
-from utils.hf_data import load_publications, get_active_researchers
+from utils.hf_data import (
+    load_publications, get_active_researchers,
+    get_publication_metrics, get_citation_sorted_counts, get_publications_sorted,
+)
 from utils.styles import (
-    apply_styles, get_theme, theme_toggle_html, render_navbar,
+    apply_styles, get_theme, render_navbar,
     metric_card_html, pub_card_html, section_title_html,
     hero_html, footer_html, DARK, LIGHT,
 )
@@ -27,44 +30,19 @@ render_navbar()
 colors = DARK if get_theme() == "dark" else LIGHT
 
 # ── Header ────────────────────────────────────────────────────────────────────
-col_title, col_toggle = st.columns([8, 1])
-with col_title:
-    st.markdown(
-        hero_html("🔬 ORC Research Dashboard",
-                  "Academic Analytics & Publication Intelligence Platform"),
-        unsafe_allow_html=True,
-    )
-with col_toggle:
-    st.write("")
-    if st.button(theme_toggle_html(), use_container_width=True):
-        new_theme = "light" if get_theme() == "dark" else "dark"
-        st.session_state.theme_mode = new_theme
-        st.query_params["theme"] = new_theme
-        st.rerun()
+st.markdown(
+    hero_html("🔬 ORC Research Dashboard",
+              "Academic Analytics & Publication Intelligence Platform"),
+    unsafe_allow_html=True,
+)
 
 # ── Research Metrics ─────────────────────────────────────────────────────────
 st.markdown(section_title_html("Research Metrics"), unsafe_allow_html=True)
 
-metrics, _ = execute_query("""
-    SELECT
-        COUNT(*) as total_pubs,
-        COALESCE(SUM(citation_count), 0) as total_citations,
-        COALESCE(AVG(citation_count), 0) as avg_citations,
-        SUM(CASE WHEN open_access = 1 THEN 1 ELSE 0 END) as oa_count
-    FROM publications
-""")
+m = get_publication_metrics()
+h_index = sum(1 for i, c in enumerate(get_citation_sorted_counts(), 1) if c >= i)
 
-h_index = 0
-h_data, _ = execute_query("SELECT citation_count FROM publications ORDER BY citation_count DESC")
-if h_data:
-    for i, row in enumerate(h_data, 1):
-        if (row.get("citation_count") or 0) >= i:
-            h_index = i
-        else:
-            break
-
-if metrics and metrics[0].get("total_pubs", 0):
-    m = metrics[0]
+if m.get("total_pubs", 0):
     total_pubs  = m.get("total_pubs", 0)
     total_cit   = m.get("total_citations", 0)
     avg_cit     = m.get("avg_citations", 0) or 0
@@ -93,12 +71,7 @@ else:
 st.markdown(section_title_html("System Status"), unsafe_allow_html=True)
 
 
-def _dot(ok: bool) -> str:
-    c = colors["success"] if ok else colors["warning"]
-    return f'<span class="orc-dot" style="background:{c}"></span>'
-
-
-def _status_block(icon, label, ok, detail):
+def _status_block(icon: str, label: str, ok: bool, detail: str) -> str:
     dot = _dot(ok)
     msg = "Connected" if ok else detail
     return (
@@ -156,15 +129,10 @@ else:
         )
 
 # ── Recent Publications ───────────────────────────────────────────────────────
-pubs, _ = execute_query("""
-    SELECT title, journal_name, publication_year, citation_count, open_access, authors
-    FROM publications
-    ORDER BY publication_year DESC, citation_count DESC
-    LIMIT 5
-""")
+pubs = get_publications_sorted("year", limit=5)
 
+st.markdown(section_title_html("Recent Publications"), unsafe_allow_html=True)
 if pubs:
-    st.markdown(section_title_html("Recent Publications"), unsafe_allow_html=True)
     for pub in pubs:
         authors = pub.get("authors", [])
         if not isinstance(authors, list):
@@ -180,6 +148,8 @@ if pubs:
             ),
             unsafe_allow_html=True,
         )
+else:
+    st.caption("No recent publications yet.")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()

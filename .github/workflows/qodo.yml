@@ -1,0 +1,46 @@
+name: Qodo — Code Review
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["claude/**"]
+
+jobs:
+  qodo-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so qodo can diff properly
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Qodo CLI
+        run: npm install -g @qodo/command
+
+      - name: Run Qodo review
+        env:
+          QODO_API_KEY: ${{ secrets.QODO_API_KEY }}
+        run: |
+          qodo --ci -y \
+            "Review the changed files in this branch for bugs, security issues, \
+             and code quality problems. List each issue with file name, line \
+             number, severity (HIGH/MEDIUM/LOW), and a one-line description. \
+             Focus on Python files only. Be concise." \
+            2>&1 | tee qodo-report.txt
+
+      - name: Upload Qodo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qodo-report
+          path: qodo-report.txt
+          retention-days: 14

@@ -34,7 +34,7 @@ def _discover_chat_id(bot_token: str) -> str:
     try:
         url = f"https://api.telegram.org/bot{bot_token}/getUpdates?limit=10&timeout=0"
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             data = json.loads(resp.read())
             if not data.get("ok"):
                 return ""
@@ -50,7 +50,7 @@ def _discover_chat_id(bot_token: str) -> str:
         return ""
 
 
-def _telegram_send(bot_token: str, chat_id: str, text: str, parse_mode: str = "") -> tuple:
+def _telegram_send(bot_token: str, chat_id: str, text: str, parse_mode: str = "") -> tuple[bool, str | None]:
     """Send a message via the Telegram Bot API. Returns (ok, error_str)."""
     params: dict = {"chat_id": chat_id, "text": text}
     if parse_mode:
@@ -62,7 +62,7 @@ def _telegram_send(bot_token: str, chat_id: str, text: str, parse_mode: str = ""
             data=data, method="POST",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:  # nosec B310
             result = json.loads(resp.read())
             if result.get("ok"):
                 return True, None
@@ -74,7 +74,7 @@ def _telegram_send(bot_token: str, chat_id: str, text: str, parse_mode: str = ""
 
 # ── OTP delivery ─────────────────────────────────────────────────────────────
 
-def _send_otp_via_relay(otp_code: str, relay_url: str, relay_secret: str) -> tuple:
+def _send_otp_via_relay(otp_code: str, relay_url: str, relay_secret: str) -> tuple[bool, str]:
     """Send OTP through a Cloudflare Worker relay. Returns (ok, error_str)."""
     import urllib.parse as _up
     parsed = _up.urlparse(relay_url)
@@ -86,7 +86,7 @@ def _send_otp_via_relay(otp_code: str, relay_url: str, relay_secret: str) -> tup
             relay_url, data=payload, method="POST",
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 – HTTPS enforced above
             result = json.loads(resp.read())
             if result.get("ok"):
                 log_audit("otp_telegram_sent", "via_relay")
@@ -99,7 +99,7 @@ def _send_otp_via_relay(otp_code: str, relay_url: str, relay_secret: str) -> tup
         return False, f"Relay: {type(e).__name__}: {e}"
 
 
-def send_otp_email(recipient_email: str, otp_code: str) -> tuple:
+def send_otp_email(recipient_email: str, otp_code: str) -> tuple[bool, str]:
     """
     Deliver OTP via Telegram. Tries relay → direct API → auto-discover chat_id.
     Returns (success, error_or_None).
@@ -163,7 +163,7 @@ def test_telegram_connection() -> dict:
     try:
         url = f"https://api.telegram.org/bot{bot_token}/getMe"
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             data = json.loads(resp.read())
             if not data.get("ok"):
                 result["error"] = data.get("description", "Invalid token")
@@ -209,7 +209,9 @@ def get_telegram_chat_id() -> str:
 
 # ── SMTP email ───────────────────────────────────────────────────────────────
 
-def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple:
+from typing import Optional # Added for send_smtp_email type hint
+
+def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple[bool, str | None]:
     """
     Send a plain-text email via SMTP (Gmail-compatible).
     Reads SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD from secrets.
@@ -226,6 +228,12 @@ def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple:
 
     if not smtp_user or not smtp_pass:
         return False, "SMTP_NOT_CONFIGURED"
+    if not smtp_host:
+        return False, "SMTP_HOST not configured"
+    try:
+        smtp_port = int(smtp_port)
+    except (ValueError, TypeError):
+        return False, f"Invalid SMTP_PORT: {smtp_port!r}"
 
     if not to_email:
         to_email = (
@@ -257,7 +265,7 @@ def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple:
 
 # ── Bug-report notifications ─────────────────────────────────────────────────
 
-def send_bug_report_notification(summary, full_description, user_contact, github_url=None) -> tuple:
+def send_bug_report_notification(summary: str, full_description: str, user_contact: str | None, github_url: str | None = None) -> tuple[bool, str | None]:
     """
     Send bug report via Telegram, then email as fallback.
     Returns (success, error_or_None).
@@ -305,7 +313,7 @@ def send_bug_report_notification(summary, full_description, user_contact, github
 
 # ── GitHub issue creation ────────────────────────────────────────────────────
 
-def create_github_issue(summary, description, steps, expected_actual, user_contact) -> tuple:
+def create_github_issue(summary: str, description: str, steps: str | None, expected_actual: str | None, user_contact: str | None) -> tuple[str | None, str | None]:
     """Create a GitHub issue for a bug report. Returns (url_or_None, error_or_None)."""
     try:
         github_token = get_nested_secret("github", "token", "")
@@ -335,7 +343,7 @@ def create_github_issue(summary, description, steps, expected_actual, user_conta
             data = resp.json()
             log_audit("github_issue_created", data.get("html_url", ""))
             return data.get("html_url"), None
-        return None, "GitHub API error"
+        return None, f"GitHub API error {resp.status_code}: {resp.text[:120]}"
     except Exception as e:
         log_audit("github_error", type(e).__name__)
         return None, "Issue creation failed"

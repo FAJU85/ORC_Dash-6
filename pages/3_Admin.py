@@ -3,6 +3,7 @@ ORC Research Dashboard - Secure Admin Panel
 Two-factor authentication with rate limiting and audit logging.
 """
 
+import hmac
 import streamlit as st
 import sys
 import os
@@ -48,6 +49,8 @@ for key, default in [
     ("login_email", None),
     ("otp_via_telegram", False),
     ("otp_tg_error", ""),
+    ("admin_orcid_to_delete_confirm", None), # Added for researcher removal confirmation
+    ("confirm_clear_error_log", False),      # Added for error log clear confirmation
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -175,6 +178,11 @@ if not st.session_state.admin_authenticated:
             else:
                 st.warning("⚠️ Telegram delivery failed — using on-screen code as fallback.")
 
+            st.warning(
+                "🔓 **Security notice:** This code is visible to anyone who can access "
+                "this URL. Configure SMTP or Telegram in the Admin → Integrations panel "
+                "for secure OTP delivery before using this in production."
+            )
             st.markdown(
                 f'<div class="orc-card" style="text-align:center;padding:1.5rem;'
                 f'border:2px solid {colors["warning"]};margin-top:0.5rem">'
@@ -218,7 +226,7 @@ if not st.session_state.admin_authenticated:
                     st.session_state.otp_code = None
                     log_audit("otp_expired")
                     st.rerun()
-                elif otp_input != st.session_state.otp_code:
+                elif not hmac.compare_digest(str(otp_input), str(st.session_state.otp_code)):
                     st.error("❌ Invalid code")
                     log_audit("otp_wrong_code")
                 else:
@@ -261,10 +269,10 @@ else:
     with tab1:
         st.markdown(section_title_html("Service Status"), unsafe_allow_html=True)
 
-        def _svc(label, ok, ok_txt, warn_txt, is_info=False):
+        def _svc(label: str, ok: bool, ok_txt: str, warn_txt: str, is_info: bool = False) -> str:
             """
             Render an HTML status card for a service with a color-coded message.
-            
+    
             Parameters:
                 label (str): Visible title for the status card.
                 ok (bool): Whether the service is considered healthy; controls color and message choice.
@@ -326,19 +334,22 @@ else:
                 for prefix in ("https://orcid.org/", "http://orcid.org/"):
                     if orcid_clean.startswith(prefix):
                         orcid_clean = orcid_clean[len(prefix):]
-
-                if not validate_orcid(orcid_clean):
-                    st.error("❌ Invalid ORCID format — expected: 0000-0000-0000-0000")
-                else:
-                    ok, err = add_researcher(orcid=orcid_clean, name=new_name, institution=new_inst)
-                    if ok:
-                        st.success(f"✅ Added: {new_name or orcid_clean}")
-                        log_audit("researcher_added", orcid_clean)
-                        st.rerun()
+                
+                with st.spinner("Adding researcher…"): # Add spinner here
+                    if not validate_orcid(orcid_clean):
+                        st.error("❌ Invalid ORCID format — expected: 0000-0000-0000-0000")
                     else:
-                        st.error(f"❌ {err}")
-                        if "HF_REPO_ID" in (err or ""):
-                            st.info("Add **HF_TOKEN** and **HF_REPO_ID** to your Space secrets to enable data storage.")
+                        ok, err = add_researcher(orcid=orcid_clean, name=new_name, institution=new_inst)
+                        if ok:
+                            st.success(f"✅ Added: {new_name or orcid_clean}")
+                            log_audit("researcher_added", orcid_clean)
+                            st.rerun()
+                        elif 'conflict' in (err or '').lower():
+                            st.warning('⚠️ Another update was in progress. Please try again.')
+                        else:
+                            st.error(f"❌ {err}")
+                            if "HF_REPO_ID" in (err or ""):
+                                st.info("Add HF_TOKEN and HF_REPO_ID to your Space secrets to enable data storage.")
             else:
                 st.warning("Please enter an ORCID")
 
@@ -382,14 +393,30 @@ else:
                                 st.rerun()
                     with c5:
                         if st.button("🗑️", key=f"del_{r.get('orcid')}", help="Remove researcher"):
-                            ok, err = remove_researcher(r.get('orcid'))
+                            st.session_state.admin_orcid_to_delete_confirm = r.get('orcid')
+                            st.rerun() # Trigger rerun to show confirmation dialog
+                    st.divider()
+            
+            # Confirmation dialog for researcher removal
+            if st.session_state.get("admin_orcid_to_delete_confirm"):
+                orcid_to_delete = st.session_state.admin_orcid_to_delete_confirm
+                st.warning(f"Are you sure you want to remove researcher {orcid_to_delete}? This action cannot be undone.")
+                col_del_c1, col_del_c2 = st.columns(2)
+                with col_del_c1:
+                    if st.button("Confirm Remove", key="admin_confirm_remove_researcher_yes", type="secondary", use_container_width=True):
+                        with st.spinner(f"Removing {orcid_to_delete}…"):
+                            ok, err = remove_researcher(orcid_to_delete)
                             if ok:
-                                st.success("✅ Removed")
-                                log_audit("researcher_removed", r.get('orcid'))
-                                st.rerun()
+                                st.success(f"✅ Removed: {orcid_to_delete}")
+                                log_audit("researcher_removed", orcid_to_delete)
                             else:
                                 st.error(f"❌ {err}")
-                    st.divider()
+                        st.session_state.admin_orcid_to_delete_confirm = None
+                        st.rerun()
+                with col_del_c2:
+                    if st.button("Cancel", key="admin_confirm_remove_researcher_no", use_container_width=True):
+                        st.session_state.admin_orcid_to_delete_confirm = None
+                        st.rerun()
         else:
             st.info("No researchers added yet.")
 
@@ -442,7 +469,8 @@ else:
             if tg_token and st.button("🔍 Get My Chat ID", key="tg_get_chat_id",
                                       help="Finds your Telegram chat ID automatically — send any message to the bot first",
                                       use_container_width=True):
-                discovered = get_telegram_chat_id()
+                with st.spinner("Searching for chat ID…"): # Add spinner here
+                    discovered = get_telegram_chat_id()
                 if discovered:
                     st.success(f"✅ Chat ID found: **`{discovered}`**")
                     st.info("Add this as `TELEGRAM_CHAT_ID` in your HF Space secrets.")
@@ -475,32 +503,35 @@ else:
             if urllib.parse.urlparse(relay_url).scheme != "https":
                 st.error("❌ TELEGRAM_RELAY_URL must use HTTPS")
             else:
-                try:
-                    payload = _json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
-                    req_obj = urllib.request.Request(
-                        relay_url, data=payload, method="POST",
-                        headers={"Content-Type": "application/json"},
-                    )
-                    with urllib.request.urlopen(req_obj, timeout=15) as r:
-                        body = r.read().decode()
-                    result = _json.loads(body)
-                    if result.get("ok"):
-                        st.success("✅ Relay test delivered! Check your Telegram.")
-                    else:
-                        st.error(f"❌ Relay error: {body}")
-                except Exception as e:
-                    st.error(f"❌ {type(e).__name__}: {e}")
+                with st.spinner("Testing relay…"): # Add spinner here
+                    try:
+                        payload = _json.dumps({"otp": "123456", "secret": relay_secret or ""}).encode()
+                        req_obj = urllib.request.Request(
+                            relay_url, data=payload, method="POST",
+                            headers={"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(req_obj, timeout=15) as r:  # nosec B310 – HTTPS enforced above
+                            body = r.read().decode()
+                        result = _json.loads(body)
+                        if result.get("ok"):
+                            st.success("✅ Relay test delivered! Check your Telegram.")
+                        else:
+                            st.error(f"❌ Relay error: {body}")
+                    except Exception as e:
+                        st.error(f"❌ {type(e).__name__}: {e}")
 
         st.markdown(section_title_html("Maintenance"), unsafe_allow_html=True)
         mc1, mc2 = st.columns(2)
         with mc1:
             if st.button("🗑️ Clear Application Cache", use_container_width=True):
-                st.cache_data.clear()
-                log_audit("cache_cleared")
+                with st.spinner("Clearing cache…"): # Add spinner here
+                    st.cache_data.clear()
+                    log_audit("cache_cleared")
                 st.success("✅ Cache cleared!")
         with mc2:
             if st.button("💾 Flush Audit Log to Storage", use_container_width=True):
-                flush_audit_log()
+                with st.spinner("Flushing audit log…"): # Add spinner here
+                    flush_audit_log()
                 st.success("✅ Audit log flushed!")
 
         st.markdown(section_title_html("Security"), unsafe_allow_html=True)
@@ -520,7 +551,8 @@ else:
         col_load, _ = st.columns([1, 3])
         with col_load:
             if st.button("🔄 Load from Storage", key="load_audit"):
-                load_audit_log_from_hf()
+                with st.spinner("Loading audit log..."):
+                    load_audit_log_from_hf()
                 st.success("Loaded!")
 
         audit_log = get_audit_log()
@@ -570,15 +602,29 @@ else:
         action_col1, action_col2, _ = st.columns([1, 1, 3])
         with action_col1:
             if st.button("🔄 Load from Storage", key="load_errors"):
-                load_error_log_from_hf()
+                with st.spinner("Loading error log..."):
+                    load_error_log_from_hf()
                 st.success("Loaded!")
         with action_col2:
             if st.button("🗑️ Clear Error Log"):
-                clear_error_log()
-                flush_error_log()
-                log_audit("error_log_cleared")
-                st.success("Cleared!")
-                st.rerun()
+                st.session_state.confirm_clear_error_log = True
+
+        if st.session_state.get("confirm_clear_error_log"):
+            st.warning("Are you sure you want to clear the error log? This action cannot be undone.")
+            col_err_c1, col_err_c2 = st.columns(2)
+            with col_err_c1:
+                if st.button("Confirm Clear Error Log", key="confirm_clear_error_log_yes", type="secondary", use_container_width=True):
+                    with st.spinner("Clearing error log…"): # Add spinner here
+                        clear_error_log()
+                        flush_error_log()
+                        log_audit("error_log_cleared")
+                    st.success("✅ Cleared!")
+                    st.session_state.confirm_clear_error_log = False
+                    st.rerun()
+            with col_err_c2:
+                if st.button("Cancel Clear Error Log", key="confirm_clear_error_log_no", use_container_width=True):
+                    st.session_state.confirm_clear_error_log = False
+                    st.rerun()
 
         error_log = get_error_log()
         if error_log:
@@ -589,11 +635,12 @@ else:
                 "ai_import_error":  "#f97316",
                 "db_query_error":   "#a855f7",
             }
+            from html import escape as _esc_h
             for entry in reversed(error_log[-100:]):
-                ts         = entry.get('timestamp', '')[:19]
-                etype      = entry.get('error_type', 'error')
-                msg        = entry.get('message', '')
-                page       = entry.get('page', '')
+                ts         = _esc_h(entry.get('timestamp', '')[:19])
+                etype      = _esc_h(entry.get('error_type', 'error'))
+                msg        = _esc_h(entry.get('message', ''))
+                page       = _esc_h(entry.get('page', ''))
                 color      = _TYPE_COLOURS.get(etype, "#ef4444")
                 page_badge = (
                     f"<span style='background:{color}20;color:{color};"

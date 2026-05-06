@@ -7,6 +7,7 @@ import time
 import json
 import hashlib
 import os
+import logging
 from typing import Any, Optional
 from datetime import datetime, timedelta
 
@@ -46,7 +47,7 @@ class Cache:
     def _get_cache_key(self, namespace: str, key: str) -> str:
         """Generate cache file key"""
         # Create hash for the key
-        hash_obj = hashlib.md5(f"{namespace}:{key}".encode())
+        hash_obj = hashlib.sha256(f"{namespace}:{key}".encode())
         return f"{namespace}_{hash_obj.hexdigest()}.json"
     
     def _get_cache_path(self, namespace: str, key: str) -> str:
@@ -86,7 +87,7 @@ class Cache:
         except (json.JSONDecodeError, IOError):
             return None
     
-    def set(self, namespace: str, key: str, data: Any, ttl: Optional[int] = None):
+    def set(self, namespace: str, key: str, data: Any, ttl: Optional[int] = None) -> None:
         """
         Set cached data
         
@@ -112,20 +113,20 @@ class Cache:
         try:
             with open(cache_path, 'w') as f:
                 json.dump(cache_data, f, indent=2)
-        except IOError:
-            pass  # Fail silently if can't write
+        except IOError as e:
+            logging.getLogger(__name__).warning('Cache write failed for %s/%s: %s', namespace, key, e)
     
     def exists(self, namespace: str, key: str) -> bool:
         """Check if key exists and is not expired"""
         return self.get(namespace, key) is not None
     
-    def delete(self, namespace: str, key: str):
+    def delete(self, namespace: str, key: str) -> None:
         """Delete cached data"""
         cache_path = self._get_cache_path(namespace, key)
         if os.path.exists(cache_path):
             os.remove(cache_path)
     
-    def clear(self, namespace: Optional[str] = None):
+    def clear(self, namespace: Optional[str] = None) -> None:
         """
         Clear all cached data
         
@@ -143,7 +144,7 @@ class Cache:
             if os.path.isfile(filepath):
                 os.remove(filepath)
     
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Remove expired cache entries"""
         if not os.path.exists(self.cache_dir):
             return
@@ -175,12 +176,12 @@ class Cache:
 cache = Cache(default_ttl=3600)  # 1 hour default
 
 
-def get_cached_works(orcid: str) -> Optional[list]:
+def get_cached_works(orcid: str) -> Optional[list[dict]]:
     """Get cached works for an ORCID"""
     return cache.get("openalex", f"works_{orcid}")
 
 
-def set_cached_works(orcid: str, works: list, ttl: int = 3600):
+def set_cached_works(orcid: str, works: list[dict], ttl: int = 3600) -> None:
     """Cache works for an ORCID"""
     cache.set("openalex", f"works_{orcid}", works, ttl)
 
@@ -190,7 +191,7 @@ def get_cached_author(orcid: str) -> Optional[dict]:
     return cache.get("openalex", f"author_{orcid}")
 
 
-def set_cached_author(orcid: str, author_data: dict, ttl: int = 86400):
+def set_cached_author(orcid: str, author_data: dict, ttl: int = 86400) -> None:
     """Cache author data (24 hour TTL)"""
     cache.set("openalex", f"author_{orcid}", author_data, ttl)
 

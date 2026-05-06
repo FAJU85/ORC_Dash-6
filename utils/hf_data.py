@@ -10,13 +10,20 @@ import json
 import time
 import threading
 import pandas as pd
-from datetime import datetime
+import streamlit as st
+from typing import Any, Optional, Callable # Added for type hints
+from datetime import datetime, timedelta # Added timedelta
 
 try:
     from huggingface_hub import HfApi, hf_hub_download
     HF_AVAILABLE = True
 except ImportError:
     HF_AVAILABLE = False
+
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None # type: ignore
 
 from utils.cache import get_cached_works, set_cached_works
 
@@ -33,15 +40,15 @@ _write_lock = threading.Lock()
 # HF DATASET CONFIGURATION
 # ============================================
 
-def get_repo_id():
+def get_repo_id() -> str | None:
     """Get the Hugging Face repo ID for data storage"""
     return os.environ.get("HF_REPO_ID") or None
 
-def get_hf_token():
+def get_hf_token() -> str | None:
     """Get Hugging Face token from environment"""
     return os.environ.get("HF_TOKEN") or None
 
-def is_hf_configured():
+def is_hf_configured() -> bool:
     """Check if Hugging Face is properly configured"""
     return HF_AVAILABLE and bool(get_hf_token()) and bool(get_repo_id())
 
@@ -49,10 +56,10 @@ def is_hf_configured():
 # LOW-LEVEL HF HELPERS
 # ============================================
 
-def _hf_download_json(filename):
+def _hf_download_json(filename: str) -> tuple[Any | None, str | None]:
     """Download and parse a JSON file from HF Dataset. Returns (data, error)."""
     try:
-        local_path = hf_hub_download(
+        local_path = hf_hub_download(  # nosec B615 – user-owned dataset, revision pinning not applicable
             repo_id=get_repo_id(),
             filename=filename,
             repo_type="dataset",
@@ -63,13 +70,27 @@ def _hf_download_json(filename):
     except Exception as e:
         return None, str(e)
 
-def _hf_upload_json(filename, data, commit_message):
-    """Upload a Python object as a JSON file to HF Dataset. Returns (success, error)."""
+def _hf_upload_json(filename: str, data: Any, commit_message: str, expected_sha: str = "") -> tuple[bool, str]:
+    """
+    Upload a Python object as a JSON file to HF Dataset. Returns (success, error).
+    If expected_sha is provided, aborts with a conflict error if the remote file's
+    SHA has changed since it was read (optimistic concurrency control).
+    """
     repo_id = get_repo_id()
     if not repo_id:
         return False, "HF_REPO_ID not configured"
     try:
         api = HfApi(token=get_hf_token())
+
+        if expected_sha:
+            try:
+                info = api.get_paths_info(repo_id, paths=[filename], repo_type="dataset")
+                current_sha = info[0].lfs.sha256 if info and hasattr(info[0], "lfs") and info[0].lfs else ""
+                if current_sha and current_sha != expected_sha:
+                    return False, "conflict: remote file changed since last read — retry"
+            except Exception:
+                pass  # can't verify SHA; proceed optimistically
+
         payload = json.dumps(data, indent=2, default=str).encode("utf-8")
         api.upload_file(
             path_or_fileobj=io.BytesIO(payload),
@@ -82,7 +103,25 @@ def _hf_upload_json(filename, data, commit_message):
     except Exception as e:
         return False, str(e)
 
-def _retry(fn, attempts=3, base_delay=2):
+
+def _hf_download_json_with_sha(filename: str) -> tuple[Any | None, str, str | None]:
+    """Download JSON and return (data, sha, error) — sha used for conflict detection."""
+    try:
+        local_path = hf_hub_download(  # nosec B615 – user-owned dataset, revision pinning not applicable
+            repo_id=get_repo_id(),
+            filename=filename,
+            repo_type="dataset",
+            force_download=True,
+        )
+        with open(local_path, "rb") as f:
+            raw = f.read()
+        import hashlib
+        sha = hashlib.sha256(raw).hexdigest()
+        return json.loads(raw), sha, None
+    except Exception as e:
+        return None, "", str(e)
+
+def _retry(fn: Callable[[], tuple], attempts: int = 3, base_delay: int = 2) -> tuple:
     """Call fn() with exponential backoff on failure. Returns last result."""
     last_err = None
     for attempt in range(attempts):
@@ -98,7 +137,8 @@ def _retry(fn, attempts=3, base_delay=2):
 # RESEARCHERS MANAGEMENT
 # ============================================
 
-def load_researchers():
+@st.cache_data(ttl=300)
+def load_researchers() -> list[dict]:
     """Load researchers list from HF Dataset"""
     if not is_hf_configured():
         return []
@@ -112,20 +152,39 @@ def load_researchers():
         return data.get("data", [])
     return []
 
-def save_researchers(researchers):
-    """Save researchers list to HF Dataset (thread-safe)"""
-    wrapped = {
-        "schema_version": SCHEMA_VERSION,
-        "data": researchers,
-        "updated_at": datetime.now().isoformat(),
-    }
-    with _write_lock:
-        return _retry(
-            lambda: _hf_upload_json("researchers.json", wrapped, "Update researchers list"),
-            attempts=3, base_delay=2,
-        )
+def save_researchers(researchers: list[dict]) -> tuple[bool, str | None]:
+    """
+    Save researchers list to HF Dataset (thread-safe, with optimistic concurrency).
+    Retries up to 3 times if a concurrent write conflict is detected.
+    """
+    for attempt in range(3):
+        _, sha, _ = _hf_download_json_with_sha("researchers.json")
+        wrapped = {
+            "schema_version": SCHEMA_VERSION,
+            "data": researchers,
+            "updated_at": datetime.now().isoformat(),
+        }
+        # sha is re-fetched at the start of each outer attempt — lambda captures current iteration sha
+        # The _write_lock should be held only during the actual _hf_upload_json call,
+        # not during the backoff sleep within _retry.
+        def _perform_researchers_upload_with_lock(current_sha):
+            with _write_lock:
+                return _hf_upload_json(
+                    "researchers.json", wrapped, "Update researchers list", expected_sha=current_sha
+                )
 
-def add_researcher(orcid, name="", institution="", email=""):
+        result = _retry(
+            lambda: _perform_researchers_upload_with_lock(sha),
+            attempts=2, base_delay=1,
+        )
+        if result[0] or "conflict" not in str(result[1]):
+            break
+        if attempt < 2:
+            time.sleep(1 + attempt)
+    load_researchers.clear()
+    return result
+
+def add_researcher(orcid: str, name: str = "", institution: str = "", email: str = "") -> tuple[bool, str | None]:
     """Add a new researcher"""
     researchers = load_researchers()
     for r in researchers:
@@ -144,7 +203,7 @@ def add_researcher(orcid, name="", institution="", email=""):
     success, error = save_researchers(researchers)
     return (True, None) if success else (False, error)
 
-def remove_researcher(orcid):
+def remove_researcher(orcid: str) -> tuple[bool, str | None]:
     """Soft-delete a researcher (keeps their publications)"""
     researchers = load_researchers()
     for r in researchers:
@@ -152,7 +211,7 @@ def remove_researcher(orcid):
             r['active'] = False
     return save_researchers(researchers)
 
-def get_active_researchers():
+def get_active_researchers() -> list[dict]:
     """Get list of active researchers"""
     return [r for r in load_researchers() if r.get('active', True)]
 
@@ -160,11 +219,12 @@ def get_active_researchers():
 # PUBLICATIONS STORAGE
 # ============================================
 
-def load_publications(orcid=None):
+@st.cache_data(ttl=300)
+def load_publications(orcid: str | None = None) -> list[dict]:
     """
     Load publications from HF Dataset.
     If orcid is provided, filter by researcher ORCID.
-    Returns list (empty on error).
+    Returns list (empty on error). Cached for 5 minutes.
     """
     if not is_hf_configured():
         return []
@@ -182,21 +242,42 @@ def load_publications(orcid=None):
         return [p for p in all_publications if p.get('orcid') == orcid]
     return all_publications
 
-def save_publications(publications):
-    """Save publications to HF Dataset (thread-safe)"""
-    wrapped = {
-        "schema_version": SCHEMA_VERSION,
-        "data": publications,
-        "updated_at": datetime.now().isoformat(),
-    }
-    with _write_lock:
-        return _retry(
-            lambda: _hf_upload_json("publications.json", wrapped, "Update publications data"),
-            attempts=3, base_delay=2,
-        )
+def save_publications(publications: list[dict]) -> tuple[bool, str | None]:
+    """
+    Save publications to HF Dataset (thread-safe, with optimistic concurrency).
+    Retries up to 3 times if a concurrent write conflict is detected.
+    """
+    for attempt in range(3):
+        _, sha, _ = _hf_download_json_with_sha("publications.json")
+        wrapped = {
+            "schema_version": SCHEMA_VERSION,
+            "data": publications,
+            "updated_at": datetime.now().isoformat(),
+        }
+        # sha is re-fetched at the start of each outer attempt — lambda captures current iteration sha
+        # The _write_lock should be held only during the actual _hf_upload_json call,
+        # not during the backoff sleep within _retry.
+        def _perform_publications_upload_with_lock(current_sha):
+            with _write_lock:
+                return _hf_upload_json(
+                    "publications.json", wrapped, "Update publications data", expected_sha=current_sha
+                )
 
-def add_publication(pub_data):
+        result = _retry(
+            lambda: _perform_publications_upload_with_lock(sha),
+            attempts=2, base_delay=1,
+        )
+        if result[0] or "conflict" not in str(result[1]):
+            break
+        if attempt < 2:
+            time.sleep(1 + attempt)
+    load_publications.clear()
+    return result
+
+def add_publication(pub_data: dict) -> tuple[bool, str]:
     """Add or update a single publication"""
+    if not pub_data.get('id'):
+        return (False, 'Publication must have a non-empty id')
     publications = load_publications()
     for i, p in enumerate(publications):
         if p.get('id') == pub_data.get('id'):
@@ -209,7 +290,7 @@ def add_publication(pub_data):
 # OPENALEX SYNC (with caching, dedup, backoff)
 # ============================================
 
-def sync_from_openalex(orcid, force=False):
+def sync_from_openalex(orcid: str, force: bool = False) -> tuple[int, str | None]:
     """
     Sync publications from OpenAlex API for a given ORCID.
     Uses cache (1-hour TTL) unless force=True.
@@ -241,10 +322,7 @@ def sync_from_openalex(orcid, force=False):
             )
             # Add polite-pool email to User-Agent if configured
             polite_email = os.environ.get("OPEN_ALEX", "")
-            user_agent = (
-                f"ORC-Dashboard/1.0 (mailto:{polite_email})" if polite_email
-                else "ORC-Dashboard/1.0"
-            )
+            user_agent = f"ORC-Dashboard/1.0 (mailto:{polite_email})" if polite_email else "ORC-Dashboard/1.0"
             # Retry with backoff
             resp = None
             for attempt in range(3):
@@ -279,7 +357,7 @@ def sync_from_openalex(orcid, force=False):
         new_count = 0
         for work in works:
             work_id = work.get("id", "").replace("https://openalex.org/", "")
-            doi = (work.get("doi") or "").replace("https://doi.org/", "") or None
+            doi = (work.get("doi") or "").replace("https://doi.org/", "").replace("http://doi.org/", "") or None
 
             # Skip duplicates by OpenAlex ID or DOI
             if work_id in existing_ids:
@@ -331,7 +409,7 @@ def sync_from_openalex(orcid, force=False):
 _audit_buffer: list = []
 _audit_buffer_lock = threading.Lock()
 
-def append_audit_entry(entry):
+def append_audit_entry(entry: dict) -> None:
     """Buffer an audit entry; flush to HF when buffer reaches threshold"""
     with _audit_buffer_lock:
         _audit_buffer.append(entry)
@@ -339,7 +417,7 @@ def append_audit_entry(entry):
     if should_flush:
         flush_audit_log()
 
-def flush_audit_log():
+def flush_audit_log() -> None:
     """Flush buffered audit entries to HF Dataset"""
     with _audit_buffer_lock:
         if not _audit_buffer:
@@ -356,7 +434,7 @@ def flush_audit_log():
         existing = existing[-1000:]
     _hf_upload_json("audit_log.json", existing, "Append audit entries")
 
-def load_audit_log():
+def load_audit_log() -> list[dict]:
     """Load persisted audit log from HF Dataset"""
     if not is_hf_configured():
         return []
@@ -373,7 +451,7 @@ _error_buffer: list = []
 _error_buffer_lock = threading.Lock()
 
 
-def append_error_entry(entry):
+def append_error_entry(entry: dict) -> None:
     """Buffer an error entry; flush to HF when buffer reaches threshold."""
     with _error_buffer_lock:
         _error_buffer.append(entry)
@@ -382,7 +460,7 @@ def append_error_entry(entry):
         flush_error_log()
 
 
-def flush_error_log():
+def flush_error_log() -> None:
     """Flush buffered error entries to HF Dataset."""
     with _error_buffer_lock:
         if not _error_buffer:
@@ -400,7 +478,7 @@ def flush_error_log():
     _hf_upload_json("error_log.json", existing, "Append error entries")
 
 
-def load_error_log():
+def load_error_log() -> list[dict]:
     """Load persisted error log from HF Dataset."""
     if not is_hf_configured():
         return []
@@ -411,64 +489,94 @@ def load_error_log():
 
 
 # ============================================
-# COMPATIBILITY LAYER (SQL-style queries → HF Dataset)
+# EXPLICIT QUERY HELPERS (replaces fragile SQL shim)
 # ============================================
 
-def execute_query(sql, params=None):
-    """
-    Compatibility shim — converts SQL-like queries to HF Dataset operations.
-    Mirrors the interface previously used for Cloudflare D1.
-    """
-    publications = load_publications()
-    if not publications:
-        return [], None
+def get_publication_metrics() -> dict[str, int | float]:
+    """Return aggregate metrics dict: total_pubs, total_citations, avg_citations, oa_count."""
+    pubs = load_publications()
+    if not pubs:
+        return {"total_pubs": 0, "total_citations": 0, "avg_citations": 0.0,
+                "oa_count": 0, "count": 0, "citations": 0}
+    df = pd.DataFrame(pubs)
+    total = len(df)
+    total_cit = int(df["citation_count"].sum()) if "citation_count" in df.columns else 0
+    avg_cit   = float(df["citation_count"].mean()) if "citation_count" in df.columns else 0.0
+    oa        = int(df["open_access"].sum())        if "open_access"    in df.columns else 0
+    return {
+        "total_pubs": total, "count": total,
+        "total_citations": total_cit, "citations": total_cit,
+        "avg_citations": avg_cit, "oa_count": oa,
+    }
 
-    df = pd.DataFrame(publications)
-    sql_lower = sql.lower().strip()
 
-    # Aggregate query used by the dashboard metrics block
+def get_publications_sorted(sort_by: str = "year", limit: int = 0) -> list[dict]:
+    """Return publications sorted by 'year' or 'citations'. Optionally limit count."""
+    pubs = load_publications()
+    if not pubs:
+        return []
+    df = pd.DataFrame(pubs)
+    if sort_by == "citations" and "citation_count" in df.columns:
+        df = df.sort_values("citation_count", ascending=False, na_position="last")
+    elif "publication_year" in df.columns:
+        df = df.sort_values(["publication_year", "citation_count"],
+                            ascending=[False, False], na_position="last")
+    if limit > 0:
+        df = df.head(limit)
+    return df.to_dict("records")
+
+
+def get_citation_sorted_counts() -> list[int]:
+    """Return citation counts in descending order — used for h-index calculation."""
+    pubs = load_publications()
+    if not pubs:
+        return []
+    df = pd.DataFrame(pubs)
+    if "citation_count" not in df.columns:
+        return []
+    return sorted(df["citation_count"].dropna().tolist(), reverse=True)
+
+
+# ── Backwards-compatible execute_query shim ────────────────────────────────────
+
+def execute_query(sql: str, params: Any | None = None) -> tuple[list[dict] | None, str | None]:
+    """
+    Thin routing shim that delegates to the explicit helpers above.
+    Kept for backwards compatibility; prefer the explicit functions for new code.
+    """
+    sql_lower = (sql or "").lower().strip()
+
     if "coalesce" in sql_lower or "case when" in sql_lower:
-        total = len(df)
-        total_cit = int(df['citation_count'].sum()) if 'citation_count' in df else 0
-        avg_cit = float(df['citation_count'].mean()) if 'citation_count' in df else 0.0
-        oa = int(df['open_access'].sum()) if 'open_access' in df else 0
-        max_year = df['publication_year'].max() if 'publication_year' in df else None
-        result = [{
-            "count": total,
-            "total_pubs": total,
-            "total_citations": total_cit,
-            "citations": total_cit,
-            "avg_citations": avg_cit,
-            "oa_count": oa,
-            "latest_year": max_year,
-        }]
-        return result, None
+        return [get_publication_metrics()], None
 
     if sql_lower.startswith("select count(*)"):
-        return [{"count": len(df)}], None
+        pubs = load_publications()
+        return [{"count": len(pubs)}], None
+
+    if "citation_count desc" in sql_lower:
+        limit = 0
+        if "limit" in sql_lower:
+            try:
+                limit = int(sql_lower.split("limit")[1].strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+        return get_publications_sorted("citations", limit), None
 
     if sql_lower.startswith("select "):
-        if "order by" in sql_lower:
-            if "publication_year desc" in sql_lower:
-                df = df.sort_values("publication_year", ascending=False, na_position='last')
-            elif "citation_count desc" in sql_lower:
-                df = df.sort_values("citation_count", ascending=False, na_position='last')
+        limit = 0
         if "limit" in sql_lower:
-            parts = sql_lower.split("limit")
-            if len(parts) > 1:
-                try:
-                    limit = int(parts[1].strip().split()[0])
-                    df = df.head(limit)
-                except (ValueError, IndexError):
-                    pass
-        return df.to_dict('records'), None
+            try:
+                limit = int(sql_lower.split("limit")[1].strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+        return get_publications_sorted("year", limit), None
 
     return [], None
 
-def is_db_configured():
+def is_db_configured() -> bool:
     """Check if HF is configured"""
     return is_hf_configured()
 
-def log_audit(action, details="", user="anonymous"):
+def log_audit(action: str, details: str = "", user: str = "anonymous") -> None:
     """No-op stub kept for import compatibility; real logging in security.py"""
     pass

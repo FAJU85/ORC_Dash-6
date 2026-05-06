@@ -594,7 +594,7 @@ hr                                      {{ border-color: {border} !important; op
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def apply_styles():
+def apply_styles() -> None:
     """
     Inject global CSS into the current page.
     Must be called on every page after set_page_config().
@@ -733,12 +733,11 @@ def theme_toggle_html() -> str:
     return "☀️ Light" if get_theme() == "dark" else "🌙 Dark"
 
 
-def render_navbar(current: str = "") -> None:
+def render_navbar() -> None:
     """
     Render a horizontal top navigation bar using st.page_link() for true SPA
-    routing (no full page reload on navigation).
-    `current` is accepted for backwards compatibility but is no longer used;
-    Streamlit marks the active page automatically via aria-current="page".
+    routing (no full page reload on navigation). Includes the theme toggle so
+    it is available on every page without repeating code in each page file.
     """
     _PAGES = [
         ("pages/0_Home.py",         "🏠", "Home"),
@@ -749,12 +748,22 @@ def render_navbar(current: str = "") -> None:
         ("pages/5_Bug_Report.py",   "🐛", "Report"),
         ("pages/3_Admin.py",        "🔐", "Admin"),
     ]
-    logo_col, *nav_cols = st.columns([1.5] + [1] * len(_PAGES))
+    all_cols = st.columns([1.5] + [1] * len(_PAGES) + [0.85])
+    logo_col  = all_cols[0]
+    nav_cols  = all_cols[1:-1]
+    theme_col = all_cols[-1]
+
     with logo_col:
         st.markdown('<div class="orc-nav-logo">🔬 ORC</div>', unsafe_allow_html=True)
     for col, (path, icon, label) in zip(nav_cols, _PAGES):
         with col:
             st.page_link(path, label=f"{icon} {label}", use_container_width=True)
+    with theme_col:
+        if st.button(theme_toggle_html(), use_container_width=True, key="_nav_theme_toggle"):
+            new_theme = "light" if get_theme() == "dark" else "dark"
+            st.session_state.theme_mode = new_theme
+            st.query_params["theme"] = new_theme
+            st.rerun()
     st.markdown('<hr style="margin:0 0 1.25rem !important">', unsafe_allow_html=True)
 
 

@@ -22,7 +22,7 @@ _FLUSH_AT     = 5             # buffer size before auto-flush
 
 # ── Persistence helpers ───────────────────────────────────────────────────────
 
-def _load_raw() -> list:
+def _load_raw() -> list[dict]:
     """Download rag_feedback.json from HF Dataset. Returns [] on any error."""
     try:
         from utils.hf_data import _hf_download_json
@@ -32,7 +32,7 @@ def _load_raw() -> list:
         return []
 
 
-def _persist(entries: list) -> None:
+def _persist(entries: list[dict]) -> None:
     """Merge *entries* into the stored file and trim to _MAX_STORED."""
     try:
         from utils.hf_data import _hf_download_json, _hf_upload_json
@@ -42,14 +42,18 @@ def _persist(entries: list) -> None:
         existing.extend(entries)
         if len(existing) > _MAX_STORED:
             existing = existing[-_MAX_STORED:]
-        _hf_upload_json(FEEDBACK_FILE, existing, "Append RAG feedback")
-    except Exception:
-        pass
+        ok, err = _hf_upload_json(FEEDBACK_FILE, existing, "Append RAG feedback")
+        if not ok:
+            from utils.security import log_error
+            log_error("rag_feedback", f"Failed to persist feedback: {err}", "rag_feedback")
+    except Exception as e:
+        from utils.security import log_error
+        log_error("rag_feedback", f"Unexpected error in _persist: {e}", "rag_feedback")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def record(query: str, pub_ids: list, rating: int,
+def record(query: str, pub_ids: list[str], rating: int,
            session_id: str = "") -> None:
     """
     Buffer one feedback entry.
@@ -80,7 +84,9 @@ def flush_now() -> None:
         invalidate_boost_cache()
 
 
-def boost_scores(publications: list) -> dict:
+from typing import Any # Added for stats() type hint
+
+def boost_scores(publications: list[dict]) -> dict[str, float]:
     """
     Return {pub_id: multiplier} where multiplier ∈ [0.75, 1.25].
     Papers appearing in positively-rated responses get multiplier > 1.0;
@@ -117,7 +123,7 @@ def invalidate_boost_cache() -> None:
     st.session_state.pop("_fb_boost_cache", None)
 
 
-def stats() -> dict:
+def stats() -> dict[str, Any]:
     """Return summary statistics for display in the UI."""
     all_fb  = _load_raw() + st.session_state.get("_fb_buffer", [])
     total   = len(all_fb)

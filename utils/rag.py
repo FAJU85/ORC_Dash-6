@@ -14,24 +14,31 @@ the sentence-transformers model is unavailable.
 
 import numpy as np
 import streamlit as st
+from typing import Any # Added for dict[str, Any]
 
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None # type: ignore
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 
 @st.cache_resource(show_spinner=False)
-def _load_neural_model():
+def _load_neural_model() -> SentenceTransformer | None:
     """Load SentenceTransformer once per server process (cached globally)."""
+    if SentenceTransformer is None:
+        st.warning("RAG neural model unavailable: sentence-transformers not installed. Falling back to TF-IDF.")
+        return None
     try:
-        from sentence_transformers import SentenceTransformer
         model = SentenceTransformer("all-MiniLM-L6-v2")
         return model
-    except Exception:
-        return None
+    except Exception as e:
+        st.warning(f"RAG neural model unavailable: {type(e).__name__}. Falling back to TF-IDF."); return None
 
 
 # ── Index building ────────────────────────────────────────────────────────────
 
-def _texts_from_pubs(publications: list) -> tuple[list[str], list[dict]]:
+def _texts_from_pubs(publications: list[dict]) -> tuple[list[str], list[dict]]:
     """Extract embeddable text strings and the matching publication records."""
     texts, valid = [], []
     for pub in publications:
@@ -44,7 +51,7 @@ def _texts_from_pubs(publications: list) -> tuple[list[str], list[dict]]:
     return texts, valid
 
 
-def _build_neural_index(texts: list) -> np.ndarray | None:
+def _build_neural_index(texts: list[str]) -> np.ndarray | None:
     model = _load_neural_model()
     if not model:
         return None
@@ -55,7 +62,7 @@ def _build_neural_index(texts: list) -> np.ndarray | None:
     return emb.astype("float32")
 
 
-def _build_tfidf_index(texts: list) -> dict | None:
+def _build_tfidf_index(texts: list[str]) -> dict[str, Any] | None:
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
         vec = TfidfVectorizer(max_features=8000, stop_words="english", ngram_range=(1, 2))
@@ -65,7 +72,7 @@ def _build_tfidf_index(texts: list) -> dict | None:
         return None
 
 
-def _build_index(publications: list) -> dict:
+def _build_index(publications: list[dict]) -> dict[str, Any]:
     """Build the best available index from the publication list."""
     texts, valid = _texts_from_pubs(publications)
     if not texts:
@@ -84,19 +91,26 @@ def _build_index(publications: list) -> dict:
     return {"kind": "empty", "pubs": []}
 
 
-def _get_cached_index(publications: list) -> dict:
-    """Return a cached index, rebuilding only when publication count changes."""
+def _get_cached_index(publications: list[dict]) -> dict[str, Any]:
+    """Return a cached index, rebuilding when publications change."""
+    n = len(publications)
+    # count + first/last pub IDs = cheap content fingerprint (catches updates, not just additions)
+    fingerprint = (
+        n,
+        publications[0].get("id", "") if n > 0 else "",
+        publications[-1].get("id", "") if n > 0 else "",
+    )
     cache = st.session_state.get("_rag_index_cache", {})
-    if cache.get("count") == len(publications) and "index" in cache:
+    if cache.get("fingerprint") == fingerprint and "index" in cache:
         return cache["index"]
     index = _build_index(publications)
-    st.session_state["_rag_index_cache"] = {"count": len(publications), "index": index}
+    st.session_state["_rag_index_cache"] = {"fingerprint": fingerprint, "index": index}
     return index
 
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
-def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
+def retrieve(query: str, publications: list[dict], top_k: int = 3) -> list[dict]:
     """
     Return the top_k publications most semantically relevant to *query*.
     Phase 2: similarity scores are multiplied by per-paper feedback boost
@@ -139,7 +153,7 @@ def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
         q_emb  = model.encode([query], normalize_embeddings=True).astype("float32")
         scores = (index["embeddings"] @ q_emb.T).squeeze()
         if scores.ndim == 0:
-            return [pubs[0]]
+            scores = np.array([scores.item()])
         scores  = _apply_boosts(scores)
         top_idx = np.argsort(scores)[::-1][:k].tolist()
         return [pubs[i] for i in top_idx]
@@ -181,7 +195,7 @@ def format_context(retrieved: list[dict]) -> str:
 
 # ── Index kind helper (for UI display) ───────────────────────────────────────
 
-def index_kind(publications: list) -> str:
+def index_kind(publications: list[dict]) -> str:
     """Return 'neural', 'tfidf', or 'empty' — useful for status display."""
     index = _get_cached_index(publications)
     return index.get("kind", "empty")

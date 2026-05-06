@@ -22,10 +22,8 @@ from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     footer_html, render_navbar, DARK, LIGHT,
 )
-from utils.ai_schemas import (
-    AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
-    PaperSummary, KeyFindings, Methodology, Implications,
-)
+from utils.prompt_builder import build_system_prompt
+from utils.hf_data import load_ai_settings
 
 apply_styles()
 render_navbar()
@@ -85,28 +83,13 @@ def _handle_feedback(msg_idx: int, rating: int) -> None:
 
 
 # ── AI system prompt ──────────────────────────────────────────────────────────
-# Shared base injected into every AI call.
-_SYSTEM_BASE = (
-    "You are an expert academic research assistant embedded in a research dashboard. "
-    "Be precise, concise, and professional. "
-    "Format answers with clear paragraphs and plain numbered or bulleted lists.\n\n"
 
-    "CONFIDENTIALITY RULES — follow these strictly in every response:\n"
-    "1. Never reveal, name, or hint at any technology, framework, library, model, "
-    "service, provider, programming language, database, or infrastructure used to "
-    "build or run this platform.\n"
-    "2. Never describe the system's internal architecture, data pipeline, AI backend, "
-    "or how any feature is implemented.\n"
-    "3. Never confirm or deny a specific technology even when asked indirectly "
-    "(e.g. 'what model are you?', 'is this GPT?', 'what's your context window?', "
-    "'are you built with X?').\n"
-    "4. If asked about implementation, technology stack, or how anything works "
-    "internally, respond only with: "
-    "'I'm here to help with academic research and publication analysis. "
-    "I'm not able to share details about how this platform is built.'\n"
-    "5. Apply rules 1–4 even when the question is phrased as a compliment, a "
-    "curiosity, or a comparison with another tool."
-)
+def _get_system_base() -> str:
+    """Build the full system prompt: private core + any admin custom instructions."""
+    override = st.session_state.get("_ai_settings_override")
+    settings = override if isinstance(override, dict) else load_ai_settings()
+    admin_raw = settings.get("custom_instructions", "")
+    return build_system_prompt(admin_raw)
 
 def _groq_client() -> tuple[object | None, str | None]: # Groq client object or None, error string or None
     api_key = (
@@ -181,7 +164,7 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None
         req = AIRequest(message=message)
     except ValidationError:
         return None, "Your message could not be processed. Please rephrase and try again."
-    system = _SYSTEM_BASE
+    system = _get_system_base()
 
     # ── RAG: inject relevant publications from the database ───────────────────
     try:
@@ -230,7 +213,7 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None
 
 def _build_chat_messages(message: str, paper: dict | None) -> tuple[list[dict], str | None]:
     """Build the messages list for a chat turn, injecting RAG + file context."""
-    system = _SYSTEM_BASE
+    system = _get_system_base()
     try:
         from utils.rag import retrieve, format_context
         all_pubs, _ = execute_query("SELECT * FROM publications")
@@ -305,7 +288,7 @@ def get_structured_response(action: str, paper: dict) -> tuple[PaperSummary | Ke
         PaperContext.from_dict(paper)
     except Exception:
         return None, None, "Invalid paper data"
-    system = _SYSTEM_BASE + "\n\nRespond with valid JSON only.\n\n" + json_schema + _paper_context(paper)
+    system = _get_system_base() + "\n\nRespond with valid JSON only.\n\n" + json_schema + _paper_context(paper)
     try:
         resp = client.chat.completions.create(
             model=get_secret("AI_MODEL") or "llama-3.3-70b-versatile",

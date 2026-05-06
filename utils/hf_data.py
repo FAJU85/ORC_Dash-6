@@ -134,6 +134,38 @@ def _retry(fn: Callable[[], tuple], attempts: int = 3, base_delay: int = 2) -> t
     return last_err
 
 # ============================================
+# AI SETTINGS
+# ============================================
+
+_AI_SETTINGS_FILE = "ai_settings.json"
+
+@st.cache_data(ttl=120)
+def load_ai_settings() -> dict:
+    """Load AI assistant settings (custom instructions, etc.) from HF Dataset."""
+    if not is_hf_configured():
+        return {}
+    data, err = _hf_download_json(_AI_SETTINGS_FILE)
+    if err or not isinstance(data, dict):
+        return {}
+    return data
+
+
+def save_ai_settings(settings: dict) -> tuple[bool, str | None]:
+    """Persist AI assistant settings to HF Dataset and clear the cache."""
+    if not is_hf_configured():
+        # Graceful degradation: store in session state only
+        return False, "Storage not configured — settings apply for this session only."
+    with _write_lock:
+        ok, err = _hf_upload_json(
+            _AI_SETTINGS_FILE, settings,
+            commit_message="Update AI assistant settings",
+        )
+    if ok:
+        load_ai_settings.clear()
+    return ok, err
+
+
+# ============================================
 # RESEARCHERS MANAGEMENT
 # ============================================
 

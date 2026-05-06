@@ -23,8 +23,10 @@ from utils.email_service import send_otp_email
 from utils.hf_data import (
     get_active_researchers, add_researcher, remove_researcher,
     load_publications, sync_from_openalex, load_researchers,
-    flush_audit_log, flush_error_log
+    flush_audit_log, flush_error_log,
+    load_ai_settings, save_ai_settings,
 )
+from utils.prompt_builder import preview_integration
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     footer_html, render_navbar, DARK, LIGHT
@@ -660,6 +662,72 @@ else:
                 )
         else:
             st.info("No errors recorded yet.")
+
+# ── AI Assistant Settings ──────────────────────────────────────────────────
+if is_admin_authenticated():
+    st.markdown(section_title_html("🤖 AI Assistant Settings"), unsafe_allow_html=True)
+    st.caption(
+        "Add custom instructions for the AI assistant. "
+        "They are analyzed and integrated into the assistant's behaviour automatically. "
+        "The core system rules remain private and cannot be overridden here."
+    )
+
+    current_settings = load_ai_settings()
+    current_instructions = current_settings.get("custom_instructions", "")
+
+    ai_custom = st.text_area(
+        "Custom instructions",
+        value=current_instructions,
+        height=160,
+        placeholder=(
+            "Examples:\n"
+            "- Focus primarily on genomics and bioinformatics research.\n"
+            "- Always cite publication years when referencing papers.\n"
+            "- Use a formal academic tone in all responses.\n"
+            "- Avoid providing medical or clinical advice."
+        ),
+        key="admin_ai_custom_instructions",
+        label_visibility="collapsed",
+    )
+
+    char_count = len(ai_custom)
+    st.caption(f"{char_count:,} / 2,000 characters")
+
+    if char_count > 2000:
+        st.warning("⚠️ Instructions exceed 2,000 characters — please shorten them.")
+
+    if ai_custom.strip():
+        with st.expander("🔍 Preview how instructions will be integrated", expanded=False):
+            st.code(preview_integration(ai_custom), language=None)
+
+    col_ai1, col_ai2 = st.columns([1, 4])
+    with col_ai1:
+        save_disabled = char_count > 2000
+        if st.button("💾 Save", type="primary", key="admin_ai_save",
+                     use_container_width=True, disabled=save_disabled):
+            new_settings = {**current_settings, "custom_instructions": ai_custom.strip()}
+            ok, err = save_ai_settings(new_settings)
+            if ok:
+                st.success("✅ AI assistant instructions updated.")
+                log_audit("ai_settings_updated", f"len={len(ai_custom.strip())}")
+            else:
+                # HF not configured — store in session so the current run uses it
+                st.session_state["_ai_settings_override"] = new_settings
+                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+    with col_ai2:
+        if current_instructions and st.button(
+            "🗑️ Clear instructions", key="admin_ai_clear", use_container_width=True
+        ):
+            ok, err = save_ai_settings({**current_settings, "custom_instructions": ""})
+            if ok:
+                st.success("✅ Custom instructions cleared.")
+                log_audit("ai_settings_cleared", "")
+            else:
+                st.session_state["_ai_settings_override"] = {
+                    **current_settings, "custom_instructions": ""
+                }
+                st.info(f"ℹ️ {err or 'Cleared for this session.'}")
+            st.rerun()
 
 # ── Footer ─────────────────────────────────────────────────────────────────
 st.divider()

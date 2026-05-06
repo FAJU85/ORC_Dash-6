@@ -3,6 +3,7 @@ ORC Research Dashboard - Secure Admin Panel
 Two-factor authentication with rate limiting and audit logging.
 """
 
+import hmac
 import streamlit as st
 import sys
 import os
@@ -223,7 +224,7 @@ if not st.session_state.admin_authenticated:
                     st.session_state.otp_code = None
                     log_audit("otp_expired")
                     st.rerun()
-                elif otp_input != st.session_state.otp_code:
+                elif not hmac.compare_digest(str(otp_input), str(st.session_state.otp_code)):
                     st.error("❌ Invalid code")
                     log_audit("otp_wrong_code")
                 else:

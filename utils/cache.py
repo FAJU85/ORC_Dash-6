@@ -46,7 +46,7 @@ class Cache:
     def _get_cache_key(self, namespace: str, key: str) -> str:
         """Generate cache file key"""
         # Create hash for the key
-        hash_obj = hashlib.md5(f"{namespace}:{key}".encode())
+        hash_obj = hashlib.sha256(f"{namespace}:{key}".encode())
         return f"{namespace}_{hash_obj.hexdigest()}.json"
     
     def _get_cache_path(self, namespace: str, key: str) -> str:

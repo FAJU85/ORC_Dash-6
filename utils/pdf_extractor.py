@@ -8,11 +8,18 @@ import io
 from typing import Optional
 
 
+_MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
 def extract_text(file_bytes: bytes) -> tuple:
     """
     Extract all text from a PDF file.
     Returns (text, error). Error is empty string on success.
     """
+    if len(file_bytes) > _MAX_PDF_BYTES:
+        mb = len(file_bytes) // (1024 * 1024)
+        return "", f"PDF too large ({mb} MB). Maximum allowed is 50 MB."
+
     # Try PyMuPDF first (fastest, best quality)
     try:
         import fitz  # PyMuPDF

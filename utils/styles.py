@@ -279,6 +279,26 @@ hr { margin: 1.25rem 0 !important; }
     border-radius: 6px 6px 0 0;
 }
 
+/* ── Page link navigation (st.page_link) ────────────── */
+[data-testid="stPageLink"] { min-width: 0; }
+[data-testid="stPageLink"] a {
+    text-decoration: none !important;
+    padding: 0.28rem 0.5rem !important;
+    border-radius: 5px !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    display: block !important;
+    text-align: center !important;
+    transition: background 0.15s, color 0.15s !important;
+}
+/* orc-nav-logo inside column */
+.orc-nav-logo {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0;
+}
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 768px) {
     .orc-hero { padding: 1.1rem; }
@@ -297,6 +317,7 @@ hr { margin: 1.25rem 0 !important; }
     .stButton > button { min-height: 2.5rem !important; }
     /* Navbar compact */
     .orc-nav-item { padding: 0.3rem 0.45rem !important; font-size: 0.72rem !important; }
+    [data-testid="stPageLink"] a { font-size: 0.72rem !important; padding: 0.25rem 0.3rem !important; }
 }
 @media (max-width: 480px) {
     .orc-hero h1 { font-size: 1.1rem; }
@@ -430,6 +451,15 @@ hr                                      {{ border-color: {border} !important; op
 /* Toggle button override */
 .stButton > button[title*="Light"],
 .stButton > button[title*="Dark"] {{ min-width: 80px !important; }}
+
+/* Page link nav (st.page_link) */
+[data-testid="stPageLink"] a {{ color: {text2} !important; }}
+[data-testid="stPageLink"] a:hover {{ background: {surface2} !important; color: {text} !important; }}
+[data-testid="stPageLink"] a[aria-current="page"] {{
+    background: {surface2} !important;
+    color: {accent} !important;
+    font-weight: 600 !important;
+}}
 </style>
 """
 
@@ -549,6 +579,15 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Icon / emoji containers — light-mode contrast */
 .orc-dot {{ border: 1px solid rgba(0,0,0,0.08); }}
+
+/* Page link nav (st.page_link) */
+[data-testid="stPageLink"] a {{ color: {text2} !important; }}
+[data-testid="stPageLink"] a:hover {{ background: {surface2} !important; color: {text} !important; }}
+[data-testid="stPageLink"] a[aria-current="page"] {{
+    background: {surface2} !important;
+    color: {accent} !important;
+    font-weight: 600 !important;
+}}
 </style>
 """
 
@@ -696,39 +735,27 @@ def theme_toggle_html() -> str:
 
 def render_navbar(current: str = "") -> None:
     """
-    Render a horizontal top navigation bar.
-    Call this at the very top of each page (after apply_styles).
-    `current` should be the page slug, e.g. 'publications', 'admin', etc.
+    Render a horizontal top navigation bar using st.page_link() for true SPA
+    routing (no full page reload on navigation).
+    `current` is accepted for backwards compatibility but is no longer used;
+    Streamlit marks the active page automatically via aria-current="page".
     """
-    theme_param = f"?theme={get_theme()}"
-
-    pages = [
-        ("/",             "🏠", "Home"),
-        ("/Publications", "📚", "Publications"),
-        ("/AI_Assistant", "🤖", "AI Assistant"),
-        ("/Analytics",    "📊", "Analytics"),
-        ("/Settings",     "⚙️", "Settings"),
-        ("/Bug_Report",   "🐛", "Report"),
-        ("/Admin",        "🔐", "Admin"),
+    _PAGES = [
+        ("pages/0_Home.py",         "🏠", "Home"),
+        ("pages/1_Publications.py", "📚", "Publications"),
+        ("pages/2_AI_Assistant.py", "🤖", "AI"),
+        ("pages/4_Analytics.py",    "📊", "Analytics"),
+        ("pages/6_Settings.py",     "⚙️", "Settings"),
+        ("pages/5_Bug_Report.py",   "🐛", "Report"),
+        ("pages/3_Admin.py",        "🔐", "Admin"),
     ]
-
-    items = ""
-    for path, icon, label in pages:
-        slug = path.strip("/").lower().replace("_", " ")
-        is_active = (slug == current.lower()) or (path == "/" and current == "")
-        active_cls = " active" if is_active else ""
-        items += (
-            f'<a href="{path}{theme_param}" class="orc-nav-item{active_cls}">'
-            f'{icon}&nbsp;{label}</a>'
-        )
-
-    st.markdown(
-        f'<nav class="orc-navbar">'
-        f'<span class="orc-nav-logo">ORC</span>'
-        f'{items}'
-        f'</nav>',
-        unsafe_allow_html=True,
-    )
+    logo_col, *nav_cols = st.columns([1.5] + [1] * len(_PAGES))
+    with logo_col:
+        st.markdown('<div class="orc-nav-logo">🔬 ORC</div>', unsafe_allow_html=True)
+    for col, (path, icon, label) in zip(nav_cols, _PAGES):
+        with col:
+            st.page_link(path, label=f"{icon} {label}", use_container_width=True)
+    st.markdown('<hr style="margin:0 0 1.25rem !important">', unsafe_allow_html=True)
 
 
 def footer_html(extra: str = "") -> str:

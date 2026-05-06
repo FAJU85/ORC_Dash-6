@@ -21,10 +21,8 @@ from utils.styles import (
     pub_card_html, footer_html, render_navbar, DARK, LIGHT
 )
 
-st.set_page_config(page_title="Publications", page_icon="📚", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("publications")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

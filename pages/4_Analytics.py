@@ -22,10 +22,8 @@ from utils.styles import (
     render_navbar, DARK, LIGHT, PLOTLY_CONFIG,
 )
 
-st.set_page_config(page_title="Analytics", page_icon="📈", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("analytics")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

@@ -14,10 +14,8 @@ from utils.export import export_to_csv, export_to_bibtex, format_citation
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, DARK, LIGHT
 from utils.ui import check_openalex_status
 
-st.set_page_config(page_title="Settings", page_icon="⚙️", layout="wide",
-                   initial_sidebar_state="collapsed")
 apply_styles()
-render_navbar("settings")
+render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 

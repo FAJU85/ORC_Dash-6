@@ -759,7 +759,7 @@ with st.expander(
                     st.session_state.chat_history
                 )
                 st.session_state.current_session_name = _sname
-                st.success(f"Saved as "{_sname}"")
+                st.success(f'Saved as "{_sname}"')
 
 
 # ── File Upload ───────────────────────────────────────────────────────────────

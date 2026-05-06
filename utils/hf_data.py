@@ -158,13 +158,18 @@ def save_researchers(researchers):
             "data": researchers,
             "updated_at": datetime.now().isoformat(),
         }
-        with _write_lock:
-            result = _retry(
-                lambda s=sha: _hf_upload_json(
-                    "researchers.json", wrapped, "Update researchers list", expected_sha=s
-                ),
-                attempts=2, base_delay=1,
-            )
+        # The _write_lock should be held only during the actual _hf_upload_json call,
+        # not during the backoff sleep within _retry.
+        def _perform_researchers_upload_with_lock(current_sha):
+            with _write_lock:
+                return _hf_upload_json(
+                    "researchers.json", wrapped, "Update researchers list", expected_sha=current_sha
+                )
+
+        result = _retry(
+            lambda: _perform_researchers_upload_with_lock(sha),
+            attempts=2, base_delay=1,
+        )
         if result[0] or "conflict" not in str(result[1]):
             break
         if attempt < 2:
@@ -242,13 +247,18 @@ def save_publications(publications):
             "data": publications,
             "updated_at": datetime.now().isoformat(),
         }
-        with _write_lock:
-            result = _retry(
-                lambda s=sha: _hf_upload_json(
-                    "publications.json", wrapped, "Update publications data", expected_sha=s
-                ),
-                attempts=2, base_delay=1,
-            )
+        # The _write_lock should be held only during the actual _hf_upload_json call,
+        # not during the backoff sleep within _retry.
+        def _perform_publications_upload_with_lock(current_sha):
+            with _write_lock:
+                return _hf_upload_json(
+                    "publications.json", wrapped, "Update publications data", expected_sha=current_sha
+                )
+
+        result = _retry(
+            lambda: _perform_publications_upload_with_lock(sha),
+            attempts=2, base_delay=1,
+        )
         if result[0] or "conflict" not in str(result[1]):
             break
         if attempt < 2:
@@ -340,7 +350,7 @@ def sync_from_openalex(orcid, force=False):
         new_count = 0
         for work in works:
             work_id = work.get("id", "").replace("https://openalex.org/", "")
-            doi = (work.get("doi") or "").replace("https://doi.org/", "") or None
+            doi = (work.get("doi") or "").replace("https://doi.org/", "").replace("http://doi.org/", "") or None
 
             # Skip duplicates by OpenAlex ID or DOI
             if work_id in existing_ids:

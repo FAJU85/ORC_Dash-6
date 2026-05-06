@@ -7,6 +7,7 @@ import pytest
 import sys
 import os
 import json
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -161,6 +162,67 @@ class TestWrappedJsonSchema:
     def test_empty_data_key(self):
         raw = {"schema_version": 1, "data": []}
         assert self._parse(raw) == []
+
+
+class TestQueryHelpers:
+    """Tests for the explicit query helpers that replaced the SQL shim."""
+
+    def _patch_load(self, pubs):
+        """Return a context manager that patches load_publications to return pubs."""
+        return mock.patch("utils.hf_data.load_publications", return_value=pubs)
+
+    def test_get_publication_metrics_empty(self):
+        from utils.hf_data import get_publication_metrics
+        with self._patch_load([]):
+            m = get_publication_metrics()
+        assert m["total_pubs"] == 0
+        assert m["total_citations"] == 0
+
+    def test_get_publication_metrics_counts(self, sample_publications):
+        from utils.hf_data import get_publication_metrics
+        with self._patch_load(sample_publications):
+            m = get_publication_metrics()
+        assert m["total_pubs"] == 3
+        assert m["total_citations"] == 28
+        assert m["oa_count"] == 2
+        assert abs(m["avg_citations"] - 28 / 3) < 0.01
+
+    def test_get_publications_sorted_by_year(self, sample_publications):
+        from utils.hf_data import get_publications_sorted
+        with self._patch_load(sample_publications):
+            result = get_publications_sorted("year")
+        years = [r["publication_year"] for r in result]
+        assert years == sorted(years, reverse=True)
+
+    def test_get_publications_sorted_by_citations(self, sample_publications):
+        from utils.hf_data import get_publications_sorted
+        with self._patch_load(sample_publications):
+            result = get_publications_sorted("citations")
+        citations = [r["citation_count"] for r in result]
+        assert citations == sorted(citations, reverse=True)
+
+    def test_get_publications_sorted_limit(self, sample_publications):
+        from utils.hf_data import get_publications_sorted
+        with self._patch_load(sample_publications):
+            result = get_publications_sorted("year", limit=2)
+        assert len(result) == 2
+
+    def test_get_publications_sorted_empty(self):
+        from utils.hf_data import get_publications_sorted
+        with self._patch_load([]):
+            assert get_publications_sorted("year") == []
+
+    def test_get_citation_sorted_counts(self, sample_publications):
+        from utils.hf_data import get_citation_sorted_counts
+        with self._patch_load(sample_publications):
+            counts = get_citation_sorted_counts()
+        assert counts == sorted(counts, reverse=True)
+        assert counts == [15, 8, 5]
+
+    def test_get_citation_sorted_counts_empty(self):
+        from utils.hf_data import get_citation_sorted_counts
+        with self._patch_load([]):
+            assert get_citation_sorted_counts() == []
 
 
 if __name__ == "__main__":

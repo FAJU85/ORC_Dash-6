@@ -147,17 +147,28 @@ def load_researchers():
     return []
 
 def save_researchers(researchers):
-    """Save researchers list to HF Dataset (thread-safe)"""
-    wrapped = {
-        "schema_version": SCHEMA_VERSION,
-        "data": researchers,
-        "updated_at": datetime.now().isoformat(),
-    }
-    with _write_lock:
-        result = _retry(
-            lambda: _hf_upload_json("researchers.json", wrapped, "Update researchers list"),
-            attempts=3, base_delay=2,
-        )
+    """
+    Save researchers list to HF Dataset (thread-safe, with optimistic concurrency).
+    Retries up to 3 times if a concurrent write conflict is detected.
+    """
+    for attempt in range(3):
+        _, sha, _ = _hf_download_json_with_sha("researchers.json")
+        wrapped = {
+            "schema_version": SCHEMA_VERSION,
+            "data": researchers,
+            "updated_at": datetime.now().isoformat(),
+        }
+        with _write_lock:
+            result = _retry(
+                lambda s=sha: _hf_upload_json(
+                    "researchers.json", wrapped, "Update researchers list", expected_sha=s
+                ),
+                attempts=2, base_delay=1,
+            )
+        if result[0] or "conflict" not in str(result[1]):
+            break
+        if attempt < 2:
+            time.sleep(1 + attempt)
     load_researchers.clear()
     return result
 

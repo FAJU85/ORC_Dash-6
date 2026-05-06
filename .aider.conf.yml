@@ -1,0 +1,12 @@
+## Aider configuration for ORC Dashboard
+## Gemma 4 via Hugging Face Inference Router
+
+model: openai/google/gemma-4-26B-A4B-it:novita
+openai-api-base: https://router.huggingface.co/v1
+# openai-api-key is read from OPENAI_API_KEY env var (set it to your HF_TOKEN)
+
+## Sensible defaults
+auto-commits: false
+gitignore: true
+pretty: true
+stream: true

@@ -175,7 +175,7 @@ else:
 st.markdown(section_title_html("Connection Status"), unsafe_allow_html=True)
 
 
-def _conn_card(label, ok, ok_txt, fail_txt):
+def _conn_card(label, ok, ok_txt, fail_txt, optional: bool = False):
     """
     Builds an HTML status card for a connection check.
     
@@ -184,11 +184,15 @@ def _conn_card(label, ok, ok_txt, fail_txt):
         ok (bool): Health flag; selects the success or warning style and message.
         ok_txt (str): Message displayed when `ok` is True.
         fail_txt (str): Message displayed when `ok` is False.
+        optional (bool): If True, uses 'muted' color for fail state instead of 'warning'.
     
     Returns:
         html (str): An HTML fragment representing a themed status card containing the label and the selected message colored according to status.
     """
-    status_color = colors["success"] if ok else colors["warning"]
+    if not ok and optional:
+        status_color = colors["muted"]
+    else:
+        status_color = colors["success"] if ok else colors["warning"]
     txt = ok_txt if ok else fail_txt
     return (
         f'<div style="background:{colors["surface"]};border-radius:6px;'
@@ -208,7 +212,7 @@ _ai_key = bool(
     or get_secret("GROQ_API") or get_secret("GROQ_TOKEN")
 )
 cc1.markdown(_conn_card("Database",    is_db_configured(), "Connected",  "Not configured"), unsafe_allow_html=True)
-cc2.markdown(_conn_card("AI Service",  _ai_key,            "Available",  "Not configured — add AI_API_KEY or GROQ_API_KEY secret"), unsafe_allow_html=True)
+cc2.markdown(_conn_card("AI Service",  _ai_key,            "Available",  "Not configured — add AI_API_KEY or GROQ_API_KEY secret", optional=True), unsafe_allow_html=True)
 cc3.markdown(_conn_card("Data Source", oa_ok,              "Online",     "Unavailable"),    unsafe_allow_html=True)
 
 # ── About ───────────────────────────────────────────────────────────────────

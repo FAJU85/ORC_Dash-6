@@ -223,7 +223,7 @@ def get_ai_response(message: str, paper: dict | None = None,
     try:
         req = AIRequest(message=message)
     except ValidationError as e:
-        return None, e.errors()[0]["msg"]
+        return None, "Your message could not be processed. Please rephrase and try again."
     system = (
         "You are an expert academic research assistant. "
         "Be precise, concise, and professional. "
@@ -751,10 +751,10 @@ for _i, msg in enumerate(st.session_state.chat_history):
         if _rating is None:
             _fc1, _fc2, _fc3 = st.columns([1, 1, 10])
             with _fc1:
-                if st.button("👍", key=f"fbup_{_i}", help="Helpful"):
+                if st.button("👍 Helpful", key=f"fbup_{_i}"):
                     _handle_feedback(_i, 1)
             with _fc2:
-                if st.button("👎", key=f"fbdn_{_i}", help="Not helpful"):
+                if st.button("👎 Not helpful", key=f"fbdn_{_i}"):
                     _handle_feedback(_i, -1)
         else:
             st.caption("✓ Helpful" if _rating == 1 else "✓ Feedback noted")
@@ -763,7 +763,7 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
     try:
         req = AIRequest(message=user_input)
     except ValidationError as e:
-        st.error(f"❌ {e.errors()[0]['msg']}")
+        st.error("❌ Your message could not be processed. Please try rephrasing it.")
         st.stop()
 
     chart_kind = _detect_chart_intent(req.message)

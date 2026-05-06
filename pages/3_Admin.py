@@ -176,7 +176,7 @@ if not st.session_state.admin_authenticated:
             else:
                 st.warning("⚠️ Telegram delivery failed — using on-screen code as fallback.")
 
-            st.error(
+            st.warning(
                 "🔓 **Security notice:** This code is visible to anyone who can access "
                 "this URL. Configure SMTP or Telegram in the Admin → Integrations panel "
                 "for secure OTP delivery before using this in production."
@@ -528,7 +528,8 @@ else:
         col_load, _ = st.columns([1, 3])
         with col_load:
             if st.button("🔄 Load from Storage", key="load_audit"):
-                load_audit_log_from_hf()
+                with st.spinner("Loading audit log..."):
+                    load_audit_log_from_hf()
                 st.success("Loaded!")
 
         audit_log = get_audit_log()
@@ -578,7 +579,8 @@ else:
         action_col1, action_col2, _ = st.columns([1, 1, 3])
         with action_col1:
             if st.button("🔄 Load from Storage", key="load_errors"):
-                load_error_log_from_hf()
+                with st.spinner("Loading error log..."):
+                    load_error_log_from_hf()
                 st.success("Loaded!")
         with action_col2:
             if st.button("🗑️ Clear Error Log"):
@@ -597,11 +599,12 @@ else:
                 "ai_import_error":  "#f97316",
                 "db_query_error":   "#a855f7",
             }
+            from html import escape as _esc_h
             for entry in reversed(error_log[-100:]):
-                ts         = entry.get('timestamp', '')[:19]
-                etype      = entry.get('error_type', 'error')
-                msg        = entry.get('message', '')
-                page       = entry.get('page', '')
+                ts         = _esc_h(entry.get('timestamp', '')[:19])
+                etype      = _esc_h(entry.get('error_type', 'error'))
+                msg        = _esc_h(entry.get('message', ''))
+                page       = _esc_h(entry.get('page', ''))
                 color      = _TYPE_COLOURS.get(etype, "#ef4444")
                 page_badge = (
                     f"<span style='background:{color}20;color:{color};"

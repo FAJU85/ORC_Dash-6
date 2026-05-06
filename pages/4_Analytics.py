@@ -116,7 +116,7 @@ with col1:
             fig.update_layout(**_ly)
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     except Exception as e:
-        st.info(f"Publications by Year chart could not be rendered: {e}")
+        st.info("Publications by Year chart unavailable — data could not be loaded.")
 
 with col2:
     try:
@@ -132,7 +132,7 @@ with col2:
             fig.update_layout(**chart_layout("Citation Impact by Year"))
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     except Exception as e:
-        st.info(f"Citation Impact chart could not be rendered: {e}")
+        st.info("Citation Impact chart unavailable — data could not be loaded.")
 
 
 # ── Most Cited Papers ────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ try:
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 except Exception as e:
-    st.info(f"Most Cited Papers chart could not be rendered: {e}")
+    st.info("Most Cited Papers chart unavailable — data could not be loaded.")
 
 
 # ── Journal & Open Access ────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ with col1:
             fig.update_traces(textfont_color=colors["text"])
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     except Exception as e:
-        st.info(f"Journal distribution chart could not be rendered: {e}")
+        st.info("Journal distribution chart unavailable — data could not be loaded.")
 
 with col2:
     try:
@@ -192,7 +192,7 @@ with col2:
             fig.update_traces(textfont_color=colors["text"])
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     except Exception as e:
-        st.info(f"Open Access chart could not be rendered: {e}")
+        st.info("Open Access chart unavailable — data could not be loaded.")
 
 
 # ── Citation Distribution ────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ if "citation_count" in df.columns:
             fig.update_layout(**chart_layout("Distribution of Citations per Paper"))
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         except Exception as e:
-            st.info(f"Histogram could not be rendered: {e}")
+            st.info("Histogram unavailable — data could not be loaded.")
     with col2:
         try:
             if "publication_year" in df.columns:
@@ -218,7 +218,7 @@ if "citation_count" in df.columns:
                 fig.update_layout(**chart_layout("Citations vs. Publication Year"))
                 st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         except Exception as e:
-            st.info(f"Scatter chart could not be rendered: {e}")
+            st.info("Scatter chart unavailable — data could not be loaded.")
 
 
 # ── Keyword Frequency ────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ try:
         else:
             st.info("Not enough title data to extract keywords.")
 except Exception as e:
-    st.info(f"Keyword analysis could not be rendered: {e}")
+    st.info("Keyword analysis unavailable — data could not be loaded.")
 
 
 # ── Author Collaboration Network ─────────────────────────────────────────────
@@ -289,7 +289,8 @@ try:
                     G.add_edge(a1, a2, weight=1)
 
     if len(G.nodes) >= 3:
-        if len(G.nodes) > 40:
+        original_node_count = len(G.nodes)
+        if original_node_count > 40:
             top_nodes = sorted(G.degree, key=lambda x: x[1], reverse=True)[:40]
             G = G.subgraph([n for n, _ in top_nodes]).copy()
 
@@ -343,12 +344,15 @@ try:
         fig = go.Figure(data=edge_traces + [node_trace])
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-        st.caption(
+        caption_text = (
             f"{len(G.nodes)} authors · {len(G.edges)} co-authorship links — "
             "node size reflects number of collaborations"
         )
+        if original_node_count > 40:
+            caption_text += " (showing top 40 by collaborations)"
+        st.caption(caption_text)
 
-    elif len(G.nodes) > 0:
+    elif 1 <= len(G.nodes) < 3:
         st.info("Not enough co-authorship data to draw a network yet. "
                 "Sync more publications or add more researchers.")
     else:
@@ -356,8 +360,8 @@ try:
 
 except ImportError:
     st.info("Network visualization requires networkx — it is listed in requirements.txt.")
-except Exception as e:
-    st.info(f"Network could not be rendered: {e}")
+except Exception:
+    st.info("Collaboration network unavailable — data could not be loaded.")
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────

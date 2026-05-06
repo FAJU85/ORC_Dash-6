@@ -136,8 +136,8 @@ else:
 # ── Recent Publications ───────────────────────────────────────────────────────
 pubs = get_publications_sorted("year", limit=5)
 
+st.markdown(section_title_html("Recent Publications"), unsafe_allow_html=True)
 if pubs:
-    st.markdown(section_title_html("Recent Publications"), unsafe_allow_html=True)
     for pub in pubs:
         authors = pub.get("authors", [])
         if not isinstance(authors, list):
@@ -153,6 +153,8 @@ if pubs:
             ),
             unsafe_allow_html=True,
         )
+else:
+    st.caption("No recent publications yet.")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()

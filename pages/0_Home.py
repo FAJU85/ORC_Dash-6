@@ -71,6 +71,15 @@ else:
 st.markdown(section_title_html("System Status"), unsafe_allow_html=True)
 
 
+def _dot(ok: bool) -> str:
+    color = "#22c55e" if ok else "#ef4444"
+    return (
+        f'<span style="display:inline-block;width:7px;height:7px;'
+        f'border-radius:50%;background:{color};margin-right:4px;'
+        f'vertical-align:middle"></span>'
+    )
+
+
 def _status_block(icon: str, label: str, ok: bool, detail: str) -> str:
     dot = _dot(ok)
     msg = "Connected" if ok else detail

@@ -53,7 +53,7 @@ def is_hf_configured():
 def _hf_download_json(filename):
     """Download and parse a JSON file from HF Dataset. Returns (data, error)."""
     try:
-        local_path = hf_hub_download(
+        local_path = hf_hub_download(  # nosec B615 – user-owned dataset, revision pinning not applicable
             repo_id=get_repo_id(),
             filename=filename,
             repo_type="dataset",
@@ -101,7 +101,7 @@ def _hf_upload_json(filename, data, commit_message, expected_sha: str = ""):
 def _hf_download_json_with_sha(filename) -> tuple:
     """Download JSON and return (data, sha, error) — sha used for conflict detection."""
     try:
-        local_path = hf_hub_download(
+        local_path = hf_hub_download(  # nosec B615 – user-owned dataset, revision pinning not applicable
             repo_id=get_repo_id(),
             filename=filename,
             repo_type="dataset",

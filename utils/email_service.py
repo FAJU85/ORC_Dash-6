@@ -34,7 +34,7 @@ def _discover_chat_id(bot_token: str) -> str:
     try:
         url = f"https://api.telegram.org/bot{bot_token}/getUpdates?limit=10&timeout=0"
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             data = json.loads(resp.read())
             if not data.get("ok"):
                 return ""
@@ -62,7 +62,7 @@ def _telegram_send(bot_token: str, chat_id: str, text: str, parse_mode: str = ""
             data=data, method="POST",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:  # nosec B310
             result = json.loads(resp.read())
             if result.get("ok"):
                 return True, None
@@ -86,7 +86,7 @@ def _send_otp_via_relay(otp_code: str, relay_url: str, relay_secret: str) -> tup
             relay_url, data=payload, method="POST",
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 – HTTPS enforced above
             result = json.loads(resp.read())
             if result.get("ok"):
                 log_audit("otp_telegram_sent", "via_relay")
@@ -163,7 +163,7 @@ def test_telegram_connection() -> dict:
     try:
         url = f"https://api.telegram.org/bot{bot_token}/getMe"
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             data = json.loads(resp.read())
             if not data.get("ok"):
                 result["error"] = data.get("description", "Invalid token")

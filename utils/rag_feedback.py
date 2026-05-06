@@ -42,9 +42,13 @@ def _persist(entries: list) -> None:
         existing.extend(entries)
         if len(existing) > _MAX_STORED:
             existing = existing[-_MAX_STORED:]
-        _hf_upload_json(FEEDBACK_FILE, existing, "Append RAG feedback")
-    except Exception:
-        pass
+        ok, err = _hf_upload_json(FEEDBACK_FILE, existing, "Append RAG feedback")
+        if not ok:
+            from utils.security import log_error
+            log_error("rag_feedback", f"Failed to persist feedback: {err}", "rag_feedback")
+    except Exception as e:
+        from utils.security import log_error
+        log_error("rag_feedback", f"Unexpected error in _persist: {e}", "rag_feedback")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

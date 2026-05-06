@@ -487,7 +487,7 @@ else:
                         relay_url, data=payload, method="POST",
                         headers={"Content-Type": "application/json"},
                     )
-                    with urllib.request.urlopen(req_obj, timeout=15) as r:
+                    with urllib.request.urlopen(req_obj, timeout=15) as r:  # nosec B310 – HTTPS enforced above
                         body = r.read().decode()
                     result = _json.loads(body)
                     if result.get("ok"):

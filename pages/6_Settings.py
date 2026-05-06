@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
 from utils.hf_data import load_publications, get_active_researchers
 from utils.export import export_to_csv, export_to_bibtex, format_citation
-from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, DARK, LIGHT
+from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, render_font_zoom_controls, DARK, LIGHT
 from utils.ui import check_openalex_status
 
 apply_styles()
@@ -46,6 +46,7 @@ _preview_pubs = _preview_pubs or []
 
 # ── Display Preferences ─────────────────────────────────────────────────────
 st.markdown(section_title_html("Display Preferences"), unsafe_allow_html=True)
+render_font_zoom_controls()
 
 col1, col2 = st.columns(2)
 

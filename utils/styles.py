@@ -7,36 +7,41 @@ Call apply_styles() at the top of every page (after set_page_config).
 import streamlit as st
 
 # ── Colour palette ────────────────────────────────────────────────────────────
-# WCAG AA-compliant contrast in both modes; inspired by GitHub's design system.
+# ORC brand palette:
+#   Steel Azure  #0C539F  — primary/accent
+#   Carrot Orange #FA9F37  — warm accent / CTAs
+#   Powder Blue  #B3CBE6  — surface tints & borders
+#   Wisteria Blue #87A2D2  — secondary text & subtle accents
+#   White        #FCFCFB  — base background (light mode)
 
 DARK = {
-    "bg":       "#0d1117",
-    "surface":  "#161b22",
-    "surface2": "#21262d",
-    "border":   "#30363d",
-    "accent":   "#2f81f7",
-    "accent2":  "#a371f7",
+    "bg":       "#08111e",
+    "surface":  "#0d1c2e",
+    "surface2": "#152843",
+    "border":   "#1d3a58",
+    "accent":   "#2e81d4",   # lightened Steel Azure for dark-bg readability
+    "accent2":  "#FA9F37",   # Carrot Orange
     "success":  "#3fb950",
-    "warning":  "#d29922",
+    "warning":  "#FA9F37",
     "error":    "#f85149",
-    "text":     "#e6edf3",
-    "text2":    "#8b949e",
-    "muted":    "#6e7681",
+    "text":     "#FCFCFB",   # White
+    "text2":    "#87A2D2",   # Wisteria Blue
+    "muted":    "#B3CBE6",   # Powder Blue
 }
 
 LIGHT = {
-    "bg":       "#ffffff",
-    "surface":  "#f6f8fa",
-    "surface2": "#edf2f7",
-    "border":   "#d0d7de",
-    "accent":   "#0969da",
-    "accent2":  "#8250df",
+    "bg":       "#FCFCFB",   # White
+    "surface":  "#eef3fa",
+    "surface2": "#dce8f4",   # Powder Blue light
+    "border":   "#B3CBE6",   # Powder Blue
+    "accent":   "#0C539F",   # Steel Azure
+    "accent2":  "#FA9F37",   # Carrot Orange
     "success":  "#1a7f37",
     "warning":  "#9a6700",
     "error":    "#cf222e",
-    "text":     "#1f2328",
-    "text2":    "#656d76",
-    "muted":    "#6e7781",
+    "text":     "#09152a",
+    "text2":    "#3d6a9e",   # mid Steel Azure
+    "muted":    "#87A2D2",   # Wisteria Blue
 }
 
 # ── Theme-aware chart helpers ─────────────────────────────────────────────────
@@ -88,7 +93,7 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
     base = {
         "plot_bgcolor":  "rgba(0,0,0,0)",
         "paper_bgcolor": "rgba(0,0,0,0)",
-        "font":   {"color": c["text"], "family": "Inter, system-ui, sans-serif", "size": 13},
+        "font":   {"color": c["text"], "family": "'Exo 2', system-ui, sans-serif", "size": 13},
         "xaxis":  {
             "gridcolor": c["border"], "linecolor": c["border"],
             "tickcolor": c["border"],
@@ -111,7 +116,7 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
     if title:
         base["title"] = {
             "text": title,
-            "font": {"color": c["text"], "size": 15, "family": "Inter, sans-serif"},
+            "font": {"color": c["text"], "size": 15, "family": "'Exo 2', sans-serif"},
             "x": 0, "xanchor": "left", "pad": {"l": 4},
         }
     if height:
@@ -134,9 +139,35 @@ _BASE_CSS = """
 button[aria-label="Open sidebar"]           { display: none !important; }
 section[data-testid="stSidebar"]            { display: none !important; }
 
+/* ── Google Fonts ───────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&family=Exo+2:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Zain:wght@300;400;700&display=swap');
+
+/* ── Material Symbols Outlined ──────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 1.1em;
+    vertical-align: middle;
+    line-height: 1;
+    user-select: none;
+}
+
 /* ── Typography ─────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, sans-serif !important; }
+html, body, [class*="css"] {
+    font-family: 'Zain', 'Exo 2', system-ui, -apple-system, sans-serif !important;
+}
+h1, h2, h3, .orc-hero h1, .orc-nav-logo {
+    font-family: 'Baloo Bhaijaan 2', 'Exo 2', sans-serif !important;
+}
+code, pre, kbd, samp,
+[data-testid="stCode"], [data-testid="stChatMessage"] code,
+[data-testid="stChatMessage"] pre {
+    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+}
+
+/* ── Font zoom (driven by --orc-zoom CSS variable) ──── */
+:root { --orc-zoom: 1; }
+html  { font-size: calc(16px * var(--orc-zoom)); }
 
 /* ── Layout ─────────────────────────────────────────── */
 .block-container,
@@ -157,7 +188,7 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
     flex-wrap: wrap;
 }
 .orc-nav-logo {
-    font-size: 0.88rem;
+    font-size: 0.95rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     margin-right: 0.75rem;
@@ -169,13 +200,14 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 .orc-nav-item {
     text-decoration: none !important;
     padding: 0.3rem 0.6rem;
-    border-radius: 5px;
+    border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 500;
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
+    transition: background 0.15s, color 0.15s;
 }
 @media (max-width: 768px) {
     .orc-navbar { gap: 0.1rem; padding: 0.3rem 0.5rem; }
@@ -185,19 +217,22 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Card ───────────────────────────────────────────── */
 .orc-card {
-    border-radius: 6px;
+    border-radius: 12px;
     padding: 1.1rem 1.4rem;
     margin-bottom: 0.65rem;
+    transition: box-shadow 0.2s;
 }
 
 /* ── Metric card ─────────────────────────────────────── */
 .orc-metric {
-    border-radius: 6px;
+    border-radius: 12px;
     padding: 1.4rem 1.1rem;
     text-align: center;
+    transition: box-shadow 0.2s;
 }
 .orc-metric .orc-metric-icon { font-size: 1.3rem; margin-bottom: 0.4rem; opacity: 0.75; }
 .orc-metric .orc-metric-val  {
+    font-family: 'Exo 2', sans-serif;
     font-size: 1.85rem; font-weight: 700; line-height: 1.1;
     letter-spacing: -0.02em;
 }
@@ -208,11 +243,12 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Publication card ───────────────────────────────── */
 .orc-pub {
-    border-radius: 6px;
+    border-radius: 12px;
     padding: 0.9rem 1.1rem 0.9rem 1.4rem;
     margin-bottom: 0.45rem;
     border-left: 3px solid transparent;
     position: relative;
+    transition: box-shadow 0.2s;
 }
 .orc-pub .orc-pub-title { font-size: 0.93rem; font-weight: 600; margin: 0 0 0.25rem; line-height: 1.45; }
 .orc-pub .orc-pub-meta  { font-size: 0.77rem; margin: 0.1rem 0 0; opacity: 0.7; }
@@ -222,7 +258,7 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
     display: inline-block;
     font-size: 0.67rem; font-weight: 600;
     padding: 0.1rem 0.45rem;
-    border-radius: 4px;
+    border-radius: 6px;
     margin-right: 0.25rem;
     text-transform: uppercase; letter-spacing: 0.04em;
     vertical-align: middle;
@@ -230,13 +266,16 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Hero ───────────────────────────────────────────── */
 .orc-hero {
-    border-radius: 10px;
+    border-radius: 14px;
     padding: 1.75rem 2rem;
     margin-bottom: 1.5rem;
     overflow: hidden;
 }
-.orc-hero h1 { font-size: 1.7rem; font-weight: 700; margin: 0 0 0.3rem; letter-spacing: -0.025em; }
-.orc-hero p  { font-size: 0.875rem; margin: 0; font-weight: 400; opacity: 0.6; }
+.orc-hero h1 {
+    font-family: 'Baloo Bhaijaan 2', sans-serif;
+    font-size: 1.8rem; font-weight: 700; margin: 0 0 0.3rem; letter-spacing: -0.02em;
+}
+.orc-hero p  { font-size: 0.9rem; margin: 0; font-weight: 400; opacity: 0.65; }
 
 /* ── Status dot ─────────────────────────────────────── */
 .orc-dot {
@@ -246,6 +285,7 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Section heading ─────────────────────────────────── */
 .orc-section-title {
+    font-family: 'Exo 2', sans-serif;
     font-size: 0.7rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.1em;
     margin: 1.75rem 0 0.875rem;
@@ -254,15 +294,15 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
 
 /* ── Streamlit widget overrides ─────────────────────── */
 hr { margin: 1.25rem 0 !important; }
-[data-testid="stChatMessage"] { border-radius: 8px !important; }
-[data-testid="stExpander"]    { border-radius: 8px !important; }
+[data-testid="stChatMessage"] { border-radius: 12px !important; }
+[data-testid="stExpander"]    { border-radius: 12px !important; }
 .streamlit-expanderHeader { font-size: 0.85rem !important; font-weight: 600 !important; }
-/* Chat input bar — prevent black bar in light mode */
 [data-testid="stBottom"],
 [data-testid="stBottom"] > div,
 [data-testid="stChatInputContainer"],
-[data-testid="stChatInputContainer"] > div { border-radius: 8px !important; }
+[data-testid="stChatInputContainer"] > div { border-radius: 12px !important; }
 [data-testid="stMetricValue"] {
+    font-family: 'Exo 2', sans-serif !important;
     font-size: 1.75rem !important; font-weight: 700 !important;
     letter-spacing: -0.02em !important;
 }
@@ -276,7 +316,16 @@ hr { margin: 1.25rem 0 !important; }
 .stTabs [data-baseweb="tab"] {
     font-size: 0.85rem; font-weight: 500;
     padding: 0.55rem 1rem;
-    border-radius: 6px 6px 0 0;
+    border-radius: 8px 8px 0 0;
+}
+
+/* Buttons — rounder for Material feel */
+.stButton > button {
+    border-radius: 8px !important;
+    font-family: 'Exo 2', sans-serif !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.02em !important;
+    transition: box-shadow 0.15s, opacity 0.15s !important;
 }
 
 /* ── Page link navigation (st.page_link) ────────────── */
@@ -284,7 +333,7 @@ hr { margin: 1.25rem 0 !important; }
 [data-testid="stPageLink"] a {
     text-decoration: none !important;
     padding: 0.28rem 0.5rem !important;
-    border-radius: 5px !important;
+    border-radius: 8px !important;
     font-size: 0.8rem !important;
     font-weight: 500 !important;
     white-space: nowrap !important;
@@ -292,11 +341,26 @@ hr { margin: 1.25rem 0 !important; }
     text-align: center !important;
     transition: background 0.15s, color 0.15s !important;
 }
-/* orc-nav-logo inside column */
 .orc-nav-logo {
     display: flex;
     align-items: center;
     padding: 0.35rem 0;
+}
+
+/* ── Font zoom controls ──────────────────────────────── */
+.orc-zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    opacity: 0.75;
+}
+.orc-zoom-bar button {
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1.4;
 }
 
 /* ── Responsive ─────────────────────────────────────── */
@@ -310,12 +374,9 @@ hr { margin: 1.25rem 0 !important; }
     .orc-pub { padding: 0.75rem 0.85rem 0.75rem 1rem; }
     .block-container { padding-top: 0.75rem !important; padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
     .orc-card { padding: 0.75rem 0.9rem !important; }
-    /* Wrap columns to 2-per-row on mobile */
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
     [data-testid="column"] { min-width: 45% !important; flex: 1 1 45% !important; }
-    /* Slightly taller buttons for tap targets */
     .stButton > button { min-height: 2.5rem !important; }
-    /* Navbar compact */
     .orc-nav-item { padding: 0.3rem 0.45rem !important; font-size: 0.72rem !important; }
     [data-testid="stPageLink"] a { font-size: 0.72rem !important; padding: 0.25rem 0.3rem !important; }
 }
@@ -324,6 +385,16 @@ hr { margin: 1.25rem 0 !important; }
     .orc-section-title { font-size: 0.65rem !important; }
 }
 </style>
+
+<script>
+/* Font-zoom: persist in localStorage, apply via CSS custom property */
+(function () {{
+    var STEP = 0.1, MIN = 1.0, MAX = 2.0, KEY = 'orc_font_zoom';
+    var zoom = parseFloat(localStorage.getItem(KEY) || '1');
+    zoom = Math.min(MAX, Math.max(MIN, zoom));
+    document.documentElement.style.setProperty('--orc-zoom', zoom);
+}})();
+</script>
 """
 
 # ── Dark-mode overrides ───────────────────────────────────────────────────────
@@ -351,20 +422,20 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Inputs */
 [data-baseweb="input"] input,
-[data-baseweb="textarea"] textarea      {{ background: {surface2} !important; border-color: {border} !important; color: {text} !important; border-radius: 6px !important; }}
-[data-baseweb="select"] > div           {{ background: {surface2} !important; color: {text}  !important; border-color: {border} !important; border-radius: 6px !important; }}
+[data-baseweb="textarea"] textarea      {{ background: {surface2} !important; border-color: {border} !important; color: {text} !important; border-radius: 8px !important; }}
+[data-baseweb="select"] > div           {{ background: {surface2} !important; color: {text}  !important; border-color: {border} !important; border-radius: 8px !important; }}
 [data-baseweb="select"] li              {{ background: {surface2} !important; color: {text}  !important; }}
 [data-baseweb="popover"] [role="option"] {{ background: {surface2} !important; color: {text}  !important; }}
 
 /* Buttons */
-.stButton > button                      {{ background: {surface2} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; border-radius: 6px !important; }}
-.stButton > button:hover                {{ border-color: {accent} !important; color: {accent} !important; }}
+.stButton > button                      {{ background: {surface2} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; }}
+.stButton > button:hover                {{ border-color: {accent2} !important; color: {accent2} !important; box-shadow: 0 2px 8px rgba(250,159,55,.18) !important; }}
 .stButton > button[kind="primary"]      {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.87 !important; }}
-[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; }}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.87 !important; box-shadow: 0 3px 10px rgba(46,129,212,.35) !important; }}
+[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
 
 /* Download button */
-[data-testid="stDownloadButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; font-weight: 500 !important; }}
+[data-testid="stDownloadButton"] > button {{ background: {accent2} !important; border-color: {accent2} !important; color: #ffffff !important; font-weight: 500 !important; }}
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"]   {{ background: transparent !important; border-bottom: 1px solid {border}; }}
@@ -373,46 +444,46 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Expander */
 .streamlit-expanderHeader           {{ color: {text} !important; }}
-[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
+[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 12px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
+.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 2px 8px rgba(1,4,9,.4); }}
 .orc-card *  {{ color: {text} !important; }}
-.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 3px rgba(1,4,9,.5); }}
+.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 2px 8px rgba(1,4,9,.4); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}
-.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 2px rgba(1,4,9,.3); }}
+.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 4px rgba(1,4,9,.3); }}
 .orc-pub .orc-pub-title {{ color: {text};  }}
 .orc-pub .orc-pub-meta  {{ color: {text2}; }}
 
-/* Hero */
-.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%) !important; border: 1px solid {border}; }}
+/* Hero — Steel Azure gradient */
+.orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, #0e2240 60%, #152843 100%) !important; border: 1px solid {border}; }}
 .orc-hero h1 {{ color: {text} !important;  }}
 .orc-hero p  {{ color: {text2} !important; }}
 
 /* Badges */
-.orc-badge-oa     {{ background: rgba(63,185,80,.12);  color: {success}; }}
-.orc-badge-year   {{ background: rgba(47,129,247,.12); color: {accent};  }}
-.orc-badge-cite   {{ background: rgba(163,113,247,.12);color: {accent2}; }}
-.orc-badge-closed {{ background: rgba(110,118,129,.15);color: {muted};   }}
+.orc-badge-oa     {{ background: rgba(63,185,80,.14);   color: {success}; }}
+.orc-badge-year   {{ background: rgba(46,129,212,.18);  color: {accent};  }}
+.orc-badge-cite   {{ background: rgba(250,159,55,.18);  color: {accent2}; }}
+.orc-badge-closed {{ background: rgba(135,162,210,.12); color: {muted};   }}
 
 /* Section title */
 .orc-section-title {{ color: {text2} !important; border-bottom: 1px solid {border}; }}
 
 /* Alert/info boxes */
-[data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+[data-testid="stAlert"]             {{ border-radius: 10px !important; }}
 
 /* Chat input bar */
 [data-testid="stBottom"]            {{ background: {bg} !important; }}
 [data-testid="stBottom"] > div      {{ background: {bg} !important; }}
-[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
 [data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
 
 /* Chat messages */
 [data-testid="stChatMessage"]       {{ background: {surface} !important; }}
 [data-testid="stChatMessage"] *     {{ color: {text} !important; }}
-[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 3px !important; padding: 0.1rem 0.35rem !important; }}
-[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 6px !important; padding: 0.65rem !important; }}
+[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 4px !important; padding: 0.1rem 0.35rem !important; }}
+[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 8px !important; padding: 0.65rem !important; }}
 
 /* Markdown containers */
 [data-testid="stMarkdownContainer"] p,
@@ -447,10 +518,6 @@ hr                                      {{ border-color: {border} !important; op
 /* Icon / emoji containers — ensure contrast */
 .orc-metric .orc-metric-icon {{ filter: none; }}
 .orc-dot {{ border: 1px solid rgba(255,255,255,0.1); }}
-
-/* Toggle button override */
-.stButton > button[title*="Light"],
-.stButton > button[title*="Dark"] {{ min-width: 80px !important; }}
 
 /* Page link nav (st.page_link) */
 [data-testid="stPageLink"] a {{ color: {text2} !important; }}
@@ -488,20 +555,20 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Inputs */
 [data-baseweb="input"] input,
-[data-baseweb="textarea"] textarea      {{ background: {bg}     !important; border-color: {border} !important; color: {text} !important; border-radius: 6px !important; }}
-[data-baseweb="select"] > div           {{ background: {bg}     !important; color: {text}   !important; border-color: {border} !important; border-radius: 6px !important; }}
+[data-baseweb="textarea"] textarea      {{ background: {bg}     !important; border-color: {border} !important; color: {text} !important; border-radius: 8px !important; }}
+[data-baseweb="select"] > div           {{ background: {bg}     !important; color: {text}   !important; border-color: {border} !important; border-radius: 8px !important; }}
 [data-baseweb="select"] li              {{ background: {surface} !important; color: {text}  !important; }}
 [data-baseweb="popover"] [role="option"] {{ background: {surface} !important; color: {text} !important; }}
 
 /* Buttons */
-.stButton > button                      {{ background: {bg} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; border-radius: 6px !important; }}
-.stButton > button:hover                {{ border-color: {accent} !important; color: {accent} !important; background: {surface} !important; }}
+.stButton > button                      {{ background: {bg} !important; border: 1px solid {border} !important; color: {text} !important; font-weight: 500 !important; }}
+.stButton > button:hover                {{ border-color: {accent2} !important; color: {accent2} !important; background: {surface} !important; box-shadow: 0 2px 6px rgba(250,159,55,.2) !important; }}
 .stButton > button[kind="primary"]      {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
-.stButton > button[kind="primary"]:hover {{ opacity: 0.88 !important; }}
-[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; }}
+.stButton > button[kind="primary"]:hover {{ opacity: 0.88 !important; box-shadow: 0 3px 10px rgba(12,83,159,.3) !important; }}
+[data-testid="stFormSubmitButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; }}
 
 /* Download button */
-[data-testid="stDownloadButton"] > button {{ background: {accent} !important; border-color: {accent} !important; color: #ffffff !important; border-radius: 6px !important; font-weight: 500 !important; }}
+[data-testid="stDownloadButton"] > button {{ background: {accent2} !important; border-color: {accent2} !important; color: #ffffff !important; font-weight: 500 !important; }}
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"]   {{ background: transparent !important; border-bottom: 1px solid {border}; }}
@@ -510,46 +577,46 @@ hr                                      {{ border-color: {border} !important; op
 
 /* Expander */
 .streamlit-expanderHeader           {{ color: {text} !important; }}
-[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 6px !important; }}
+[data-testid="stExpander"]          {{ border: 1px solid {border} !important; background: {surface} !important; border-radius: 12px !important; }}
 
 /* Cards */
-.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
+.orc-card    {{ background: {surface} !important; color: {text} !important; border: 1px solid {border}; box-shadow: 0 1px 4px rgba(12,83,159,.08); }}
 .orc-card *  {{ color: {text} !important; }}
-.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 2px rgba(31,35,40,.08); }}
+.orc-metric  {{ background: {surface} !important;  border: 1px solid {border}; box-shadow: 0 1px 4px rgba(12,83,159,.08); }}
 .orc-metric .orc-metric-val {{ color: {text};  }}
 .orc-metric .orc-metric-lbl {{ color: {text2}; }}
-.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 2px rgba(31,35,40,.06); }}
+.orc-pub     {{ background: {surface} !important;  border-left-color: {accent}; box-shadow: 0 1px 3px rgba(12,83,159,.06); }}
 .orc-pub .orc-pub-title {{ color: {text};  }}
 .orc-pub .orc-pub-meta  {{ color: {text2}; }}
 
-/* Hero */
+/* Hero — light Powder Blue gradient */
 .orc-hero    {{ background: linear-gradient(135deg, {surface} 0%, {surface2} 100%) !important; border: 1px solid {border}; }}
 .orc-hero h1 {{ color: {text} !important;  }}
 .orc-hero p  {{ color: {text2} !important; }}
 
 /* Badges */
-.orc-badge-oa     {{ background: rgba(26,127,55,.1);   color: {success}; }}
-.orc-badge-year   {{ background: rgba(9,105,218,.1);   color: {accent};  }}
-.orc-badge-cite   {{ background: rgba(130,80,223,.1);  color: {accent2}; }}
-.orc-badge-closed {{ background: rgba(110,119,129,.1); color: {muted};   }}
+.orc-badge-oa     {{ background: rgba(26,127,55,.1);    color: {success}; }}
+.orc-badge-year   {{ background: rgba(12,83,159,.1);    color: {accent};  }}
+.orc-badge-cite   {{ background: rgba(250,159,55,.15);  color: #a05800;   }}
+.orc-badge-closed {{ background: rgba(135,162,210,.15); color: {muted};   }}
 
 /* Section title */
 .orc-section-title {{ color: {text2} !important; border-bottom: 1px solid {border}; }}
 
 /* Alert/info boxes */
-[data-testid="stAlert"]             {{ border-radius: 6px !important; }}
+[data-testid="stAlert"]             {{ border-radius: 10px !important; }}
 
 /* Chat input bar */
 [data-testid="stBottom"]            {{ background: {bg} !important; }}
 [data-testid="stBottom"] > div      {{ background: {bg} !important; }}
-[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 10px !important; }}
+[data-testid="stChatInputContainer"]       {{ background: {surface} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
 [data-testid="stChatInputContainer"] textarea {{ background: {surface} !important; color: {text} !important; }}
 
 /* Chat messages */
 [data-testid="stChatMessage"]       {{ background: {surface} !important; }}
 [data-testid="stChatMessage"] *     {{ color: {text} !important; }}
-[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 3px !important; padding: 0.1rem 0.35rem !important; }}
-[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 6px !important; padding: 0.65rem !important; }}
+[data-testid="stChatMessage"] code  {{ background: {surface2} !important; border-radius: 4px !important; padding: 0.1rem 0.35rem !important; }}
+[data-testid="stChatMessage"] pre   {{ background: {surface2} !important; border-radius: 8px !important; padding: 0.65rem !important; }}
 
 /* Markdown containers */
 [data-testid="stMarkdownContainer"] p,
@@ -612,6 +679,47 @@ def apply_styles() -> None:
     st.markdown(_BASE_CSS, unsafe_allow_html=True)
     st.markdown((_DARK_CSS if theme == "dark" else _LIGHT_CSS).format(**colors),
                 unsafe_allow_html=True)
+    # Re-apply zoom from localStorage on every navigation (SPA page switches reset the DOM)
+    st.markdown(
+        "<script>(function(){var z=parseFloat(localStorage.getItem('orc_font_zoom')||'1');"
+        "z=Math.min(2,Math.max(1,z));"
+        "document.documentElement.style.setProperty('--orc-zoom',z);})();</script>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_font_zoom_controls() -> None:
+    """Render +/- zoom buttons that persist font size (100–200%) in localStorage."""
+    c = DARK if get_theme() == "dark" else LIGHT
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:0.5rem;'
+        f'font-size:0.78rem;color:{c["text2"]};margin-bottom:0.5rem">'
+        f'<span>Text size</span>'
+        f'<button onclick="(function(){{'
+        f'var k=\'orc_font_zoom\',s=0.1,mn=1,mx=2;'
+        f'var z=Math.max(mn,parseFloat(localStorage.getItem(k)||\'1\')-s);'
+        f'localStorage.setItem(k,z.toFixed(1));'
+        f'document.documentElement.style.setProperty(\'--orc-zoom\',z);'
+        f'}})()" style="padding:0.15rem 0.55rem;border-radius:6px;cursor:pointer;'
+        f'background:{c["surface2"]};border:1px solid {c["border"]};color:{c["text"]}">'
+        f'A−</button>'
+        f'<button onclick="(function(){{'
+        f'var k=\'orc_font_zoom\',s=0.1,mn=1,mx=2;'
+        f'var z=Math.min(mx,parseFloat(localStorage.getItem(k)||\'1\')+s);'
+        f'localStorage.setItem(k,z.toFixed(1));'
+        f'document.documentElement.style.setProperty(\'--orc-zoom\',z);'
+        f'}})()" style="padding:0.15rem 0.55rem;border-radius:6px;cursor:pointer;'
+        f'background:{c["surface2"]};border:1px solid {c["border"]};color:{c["text"]}">'
+        f'A+</button>'
+        f'<button onclick="(function(){{'
+        f'localStorage.setItem(\'orc_font_zoom\',\'1\');'
+        f'document.documentElement.style.setProperty(\'--orc-zoom\',1);'
+        f'}})()" style="padding:0.15rem 0.45rem;border-radius:6px;cursor:pointer;'
+        f'background:{c["surface2"]};border:1px solid {c["border"]};color:{c["text2"]};font-size:0.72rem">'
+        f'reset</button>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ── HTML component helpers ────────────────────────────────────────────────────

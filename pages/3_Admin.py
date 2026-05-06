@@ -175,6 +175,11 @@ if not st.session_state.admin_authenticated:
             else:
                 st.warning("⚠️ Telegram delivery failed — using on-screen code as fallback.")
 
+            st.error(
+                "🔓 **Security notice:** This code is visible to anyone who can access "
+                "this URL. Configure SMTP or Telegram in the Admin → Integrations panel "
+                "for secure OTP delivery before using this in production."
+            )
             st.markdown(
                 f'<div class="orc-card" style="text-align:center;padding:1.5rem;'
                 f'border:2px solid {colors["warning"]};margin-top:0.5rem">'

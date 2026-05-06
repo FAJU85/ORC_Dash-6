@@ -14,8 +14,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.security import execute_query
-from utils.hf_data import get_active_researchers, load_publications
+from utils.hf_data import get_active_researchers, load_publications, get_publications_sorted
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     metric_card_html, footer_html, chart_layout, chart_colors,
@@ -46,8 +45,7 @@ else:
 if selected_researcher != "All Researchers" and selected_researcher in researcher_map:
     pubs = load_publications(orcid=researcher_map[selected_researcher])
 else:
-    pubs, _ = execute_query("SELECT * FROM publications ORDER BY publication_year DESC")
-    pubs = pubs or []
+    pubs = get_publications_sorted("year")
 
 if not pubs:
     st.markdown(
@@ -79,11 +77,6 @@ h_index = sum(1 for i, c in enumerate(citations_sorted, 1) if c >= i)
 total_cit = int(df["citation_count"].sum()) if "citation_count" in df.columns else 0
 avg_cit   = df["citation_count"].mean()     if "citation_count" in df.columns else 0
 oa_count  = int(df["open_access"].sum())    if "open_access"    in df.columns else 0
-year_span = ""
-if "publication_year" in df.columns:
-    years_clean = df["publication_year"].dropna()
-    if not years_clean.empty:
-        year_span = f"{int(years_clean.min())}–{int(years_clean.max())}"
 
 mc1, mc2, mc3, mc4, mc5 = st.columns(5)
 for col, icon, val, lbl in [
@@ -101,53 +94,67 @@ st.markdown(section_title_html("Publication Trends"), unsafe_allow_html=True)
 col1, col2 = st.columns(2)
 
 with col1:
-    if "publication_year" in df.columns:
-        year_counts = df.groupby("publication_year").size().reset_index(name="count")
-        year_counts = year_counts.sort_values("publication_year")
-        # Cumulative overlay
-        year_counts["cumulative"] = year_counts["count"].cumsum()
-        fig = go.Figure()
-        fig.add_bar(x=year_counts["publication_year"], y=year_counts["count"],
-                    name="Per Year", marker_color=ccs[0])
-        fig.add_scatter(x=year_counts["publication_year"], y=year_counts["cumulative"],
-                        name="Cumulative", mode="lines+markers",
-                        line=dict(color=ccs[1], width=2), yaxis="y2")
-        _ly = chart_layout("Publications by Year")
-        _ly["yaxis2"] = dict(overlaying="y", side="right",
-                             tickfont=dict(color=colors["text2"]),
-                             title_font=dict(color=colors["text2"]))
-        _ly["legend"] = dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)")
-        fig.update_layout(**_ly)
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    try:
+        if "publication_year" not in df.columns:
+            st.info("Publication year data not available.")
+        else:
+            year_counts = df.groupby("publication_year").size().reset_index(name="count")
+            year_counts = year_counts.sort_values("publication_year")
+            year_counts["cumulative"] = year_counts["count"].cumsum()
+            fig = go.Figure()
+            fig.add_bar(x=year_counts["publication_year"], y=year_counts["count"],
+                        name="Per Year", marker_color=ccs[0])
+            fig.add_scatter(x=year_counts["publication_year"], y=year_counts["cumulative"],
+                            name="Cumulative", mode="lines+markers",
+                            line=dict(color=ccs[1], width=2), yaxis="y2")
+            _ly = chart_layout("Publications by Year")
+            _ly["yaxis2"] = dict(overlaying="y", side="right",
+                                 tickfont=dict(color=colors["text2"]),
+                                 title_font=dict(color=colors["text2"]))
+            _ly["legend"] = dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)")
+            fig.update_layout(**_ly)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    except Exception as e:
+        st.info(f"Publications by Year chart could not be rendered: {e}")
 
 with col2:
-    if "publication_year" in df.columns and "citation_count" in df.columns:
-        year_cit = df.groupby("publication_year")["citation_count"].sum().reset_index()
-        year_cit = year_cit.sort_values("publication_year")
-        fig = px.area(year_cit, x="publication_year", y="citation_count",
-                      labels={"publication_year": "Year", "citation_count": "Citations"},
-                      color_discrete_sequence=[ccs[2]])
-        fig.update_traces(line_color=ccs[2], opacity=0.7)
-        fig.update_layout(**chart_layout("Citation Impact by Year"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    try:
+        if "publication_year" not in df.columns or "citation_count" not in df.columns:
+            st.info("Year or citation data not available.")
+        else:
+            year_cit = df.groupby("publication_year")["citation_count"].sum().reset_index()
+            year_cit = year_cit.sort_values("publication_year")
+            fig = px.area(year_cit, x="publication_year", y="citation_count",
+                          labels={"publication_year": "Year", "citation_count": "Citations"},
+                          color_discrete_sequence=[ccs[2]])
+            fig.update_traces(line_color=ccs[2], opacity=0.7)
+            fig.update_layout(**chart_layout("Citation Impact by Year"))
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    except Exception as e:
+        st.info(f"Citation Impact chart could not be rendered: {e}")
 
 
 # ── Most Cited Papers ────────────────────────────────────────────────────────
 st.markdown(section_title_html("Most Cited Papers"), unsafe_allow_html=True)
-if "citation_count" in df.columns:
-    top = df.nlargest(10, "citation_count")[
-        ["title", "journal_name", "publication_year", "citation_count"]
-    ].copy()
-    top["label"] = top["title"].str[:60] + "…"
-    fig = px.bar(top, y="label", x="citation_count", orientation="h",
-                 labels={"label": "", "citation_count": "Citations"},
-                 color="citation_count", color_continuous_scale=["#2f81f7", "#a371f7"])
-    layout = chart_layout()
-    layout["yaxis"] = {**layout.get("yaxis", {}), "categoryorder": "total ascending"}
-    layout["height"] = 400
-    layout["coloraxis_showscale"] = False
-    fig.update_layout(**layout)
-    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+try:
+    if "citation_count" not in df.columns:
+        st.info("Citation data not available.")
+    else:
+        top = df.nlargest(10, "citation_count")[
+            ["title", "journal_name", "publication_year", "citation_count"]
+        ].copy()
+        top["label"] = top["title"].str[:60] + "…"
+        fig = px.bar(top, y="label", x="citation_count", orientation="h",
+                     labels={"label": "", "citation_count": "Citations"},
+                     color="citation_count", color_continuous_scale=["#2f81f7", "#a371f7"])
+        layout = chart_layout()
+        layout["yaxis"] = {**layout.get("yaxis", {}), "categoryorder": "total ascending"}
+        layout["height"] = 400
+        layout["coloraxis_showscale"] = False
+        fig.update_layout(**layout)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+except Exception as e:
+    st.info(f"Most Cited Papers chart could not be rendered: {e}")
 
 
 # ── Journal & Open Access ────────────────────────────────────────────────────
@@ -155,26 +162,36 @@ st.markdown(section_title_html("Distribution"), unsafe_allow_html=True)
 col1, col2 = st.columns(2)
 
 with col1:
-    if "journal_name" in df.columns:
-        jcounts = df["journal_name"].value_counts().head(8).reset_index()
-        jcounts.columns = ["journal", "count"]
-        fig = px.pie(jcounts, values="count", names="journal",
-                     color_discrete_sequence=ccs, hole=0.4)
-        fig.update_layout(**chart_layout("Top Journals"))
-        fig.update_traces(textfont_color=colors["text"])
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    try:
+        if "journal_name" not in df.columns:
+            st.info("Journal data not available.")
+        else:
+            jcounts = df["journal_name"].value_counts().head(8).reset_index()
+            jcounts.columns = ["journal", "count"]
+            fig = px.pie(jcounts, values="count", names="journal",
+                         color_discrete_sequence=ccs, hole=0.4)
+            fig.update_layout(**chart_layout("Top Journals"))
+            fig.update_traces(textfont_color=colors["text"])
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    except Exception as e:
+        st.info(f"Journal distribution chart could not be rendered: {e}")
 
 with col2:
-    if "open_access" in df.columns:
-        oa     = int(df["open_access"].sum())
-        closed = len(df) - oa
-        fig = px.pie(values=[oa, closed],
-                     names=["Open Access", "Subscription"],
-                     color_discrete_sequence=[colors["success"], colors["muted"]],
-                     hole=0.4)
-        fig.update_layout(**chart_layout("Open Access"))
-        fig.update_traces(textfont_color=colors["text"])
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    try:
+        if "open_access" not in df.columns:
+            st.info("Open access data not available.")
+        else:
+            oa     = int(df["open_access"].sum())
+            closed = len(df) - oa
+            fig = px.pie(values=[oa, closed],
+                         names=["Open Access", "Subscription"],
+                         color_discrete_sequence=[colors["success"], colors["muted"]],
+                         hole=0.4)
+            fig.update_layout(**chart_layout("Open Access"))
+            fig.update_traces(textfont_color=colors["text"])
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+    except Exception as e:
+        st.info(f"Open Access chart could not be rendered: {e}")
 
 
 # ── Citation Distribution ────────────────────────────────────────────────────
@@ -182,19 +199,25 @@ st.markdown(section_title_html("Citation Distribution"), unsafe_allow_html=True)
 if "citation_count" in df.columns:
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.histogram(df, x="citation_count", nbins=20,
-                           labels={"citation_count": "Citations", "count": "Papers"},
-                           color_discrete_sequence=[ccs[3]])
-        fig.update_layout(**chart_layout("Distribution of Citations per Paper"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    with col2:
-        if "publication_year" in df.columns:
-            fig = px.scatter(df, x="publication_year", y="citation_count",
-                             size="citation_count", size_max=40,
-                             labels={"publication_year": "Year", "citation_count": "Citations"},
-                             color_discrete_sequence=[ccs[0]])
-            fig.update_layout(**chart_layout("Citations vs. Publication Year"))
+        try:
+            fig = px.histogram(df, x="citation_count", nbins=20,
+                               labels={"citation_count": "Citations", "count": "Papers"},
+                               color_discrete_sequence=[ccs[3]])
+            fig.update_layout(**chart_layout("Distribution of Citations per Paper"))
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        except Exception as e:
+            st.info(f"Histogram could not be rendered: {e}")
+    with col2:
+        try:
+            if "publication_year" in df.columns:
+                fig = px.scatter(df, x="publication_year", y="citation_count",
+                                 size="citation_count", size_max=40,
+                                 labels={"publication_year": "Year", "citation_count": "Citations"},
+                                 color_discrete_sequence=[ccs[0]])
+                fig.update_layout(**chart_layout("Citations vs. Publication Year"))
+                st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        except Exception as e:
+            st.info(f"Scatter chart could not be rendered: {e}")
 
 
 # ── Keyword Frequency ────────────────────────────────────────────────────────
@@ -211,25 +234,32 @@ _STOP = {
     "results","data","methods","conclusion","conclusions","approach",
 }
 
-if "title" in df.columns:
-    all_words: list = []
-    for title in df["title"].dropna():
-        words = re.findall(r"\b[a-zA-Z]{4,}\b", str(title).lower())
-        all_words.extend(w for w in words if w not in _STOP)
+try:
+    if "title" not in df.columns:
+        st.info("Title data not available for keyword analysis.")
+    else:
+        all_words: list = []
+        for title in df["title"].dropna():
+            words = re.findall(r"\b[a-zA-Z]{4,}\b", str(title).lower())
+            all_words.extend(w for w in words if w not in _STOP)
 
-    if all_words:
-        top_words = Counter(all_words).most_common(25)
-        wdf = pd.DataFrame(top_words, columns=["keyword", "count"])
-        fig = px.bar(wdf, x="count", y="keyword", orientation="h",
-                     labels={"keyword": "", "count": "Frequency"},
-                     color="count",
-                     color_continuous_scale=["#2f81f7", "#a371f7"])
-        layout = chart_layout("Most Frequent Keywords in Paper Titles")
-        layout["yaxis"] = {**layout.get("yaxis", {}), "categoryorder": "total ascending"}
-        layout["height"] = 500
-        layout["coloraxis_showscale"] = False
-        fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        if all_words:
+            top_words = Counter(all_words).most_common(25)
+            wdf = pd.DataFrame(top_words, columns=["keyword", "count"])
+            fig = px.bar(wdf, x="count", y="keyword", orientation="h",
+                         labels={"keyword": "", "count": "Frequency"},
+                         color="count",
+                         color_continuous_scale=["#2f81f7", "#a371f7"])
+            layout = chart_layout("Most Frequent Keywords in Paper Titles")
+            layout["yaxis"] = {**layout.get("yaxis", {}), "categoryorder": "total ascending"}
+            layout["height"] = 500
+            layout["coloraxis_showscale"] = False
+            fig.update_layout(**layout)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        else:
+            st.info("Not enough title data to extract keywords.")
+except Exception as e:
+    st.info(f"Keyword analysis could not be rendered: {e}")
 
 
 # ── Author Collaboration Network ─────────────────────────────────────────────
@@ -249,7 +279,6 @@ try:
                 authors = []
         if not isinstance(authors, list):
             continue
-        # Keep first 8 authors per paper to avoid mega-edges on large collaborations
         clean = [str(a).strip() for a in authors[:8] if a and str(a).strip()]
         for i, a1 in enumerate(clean):
             for a2 in clean[i + 1:]:
@@ -259,14 +288,12 @@ try:
                     G.add_edge(a1, a2, weight=1)
 
     if len(G.nodes) >= 3:
-        # Limit to the top 40 nodes by degree for readability
         if len(G.nodes) > 40:
             top_nodes = sorted(G.degree, key=lambda x: x[1], reverse=True)[:40]
             G = G.subgraph([n for n, _ in top_nodes]).copy()
 
         pos = nx.spring_layout(G, seed=42, k=1.5)
 
-        # Edge traces (vary width by weight)
         edge_traces = []
         for u, v, data in G.edges(data=True):
             x0, y0 = pos[u]
@@ -282,7 +309,6 @@ try:
                 )
             )
 
-        # Node trace
         degree = dict(G.degree())
         node_x  = [pos[n][0] for n in G.nodes]
         node_y  = [pos[n][1] for n in G.nodes]

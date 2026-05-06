@@ -85,12 +85,19 @@ def _build_index(publications: list) -> dict:
 
 
 def _get_cached_index(publications: list) -> dict:
-    """Return a cached index, rebuilding only when publication count changes."""
+    """Return a cached index, rebuilding when publications change."""
+    n = len(publications)
+    # count + first/last pub IDs = cheap content fingerprint (catches updates, not just additions)
+    fingerprint = (
+        n,
+        publications[0].get("id", "") if n > 0 else "",
+        publications[-1].get("id", "") if n > 0 else "",
+    )
     cache = st.session_state.get("_rag_index_cache", {})
-    if cache.get("count") == len(publications) and "index" in cache:
+    if cache.get("fingerprint") == fingerprint and "index" in cache:
         return cache["index"]
     index = _build_index(publications)
-    st.session_state["_rag_index_cache"] = {"count": len(publications), "index": index}
+    st.session_state["_rag_index_cache"] = {"fingerprint": fingerprint, "index": index}
     return index
 
 

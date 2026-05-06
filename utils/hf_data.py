@@ -10,6 +10,7 @@ import json
 import time
 import threading
 import pandas as pd
+import streamlit as st
 from datetime import datetime
 
 try:
@@ -63,13 +64,27 @@ def _hf_download_json(filename):
     except Exception as e:
         return None, str(e)
 
-def _hf_upload_json(filename, data, commit_message):
-    """Upload a Python object as a JSON file to HF Dataset. Returns (success, error)."""
+def _hf_upload_json(filename, data, commit_message, expected_sha: str = ""):
+    """
+    Upload a Python object as a JSON file to HF Dataset. Returns (success, error).
+    If expected_sha is provided, aborts with a conflict error if the remote file's
+    SHA has changed since it was read (optimistic concurrency control).
+    """
     repo_id = get_repo_id()
     if not repo_id:
         return False, "HF_REPO_ID not configured"
     try:
         api = HfApi(token=get_hf_token())
+
+        if expected_sha:
+            try:
+                info = api.get_paths_info(repo_id, paths=[filename], repo_type="dataset")
+                current_sha = info[0].lfs.sha256 if info and hasattr(info[0], "lfs") and info[0].lfs else ""
+                if current_sha and current_sha != expected_sha:
+                    return False, "conflict: remote file changed since last read — retry"
+            except Exception:
+                pass  # can't verify SHA; proceed optimistically
+
         payload = json.dumps(data, indent=2, default=str).encode("utf-8")
         api.upload_file(
             path_or_fileobj=io.BytesIO(payload),
@@ -81,6 +96,24 @@ def _hf_upload_json(filename, data, commit_message):
         return True, None
     except Exception as e:
         return False, str(e)
+
+
+def _hf_download_json_with_sha(filename) -> tuple:
+    """Download JSON and return (data, sha, error) — sha used for conflict detection."""
+    try:
+        local_path = hf_hub_download(
+            repo_id=get_repo_id(),
+            filename=filename,
+            repo_type="dataset",
+            force_download=True,
+        )
+        with open(local_path, "rb") as f:
+            raw = f.read()
+        import hashlib
+        sha = hashlib.sha256(raw).hexdigest()
+        return json.loads(raw), sha, None
+    except Exception as e:
+        return None, "", str(e)
 
 def _retry(fn, attempts=3, base_delay=2):
     """Call fn() with exponential backoff on failure. Returns last result."""
@@ -98,6 +131,7 @@ def _retry(fn, attempts=3, base_delay=2):
 # RESEARCHERS MANAGEMENT
 # ============================================
 
+@st.cache_data(ttl=300)
 def load_researchers():
     """Load researchers list from HF Dataset"""
     if not is_hf_configured():
@@ -120,10 +154,12 @@ def save_researchers(researchers):
         "updated_at": datetime.now().isoformat(),
     }
     with _write_lock:
-        return _retry(
+        result = _retry(
             lambda: _hf_upload_json("researchers.json", wrapped, "Update researchers list"),
             attempts=3, base_delay=2,
         )
+    load_researchers.clear()
+    return result
 
 def add_researcher(orcid, name="", institution="", email=""):
     """Add a new researcher"""
@@ -160,11 +196,12 @@ def get_active_researchers():
 # PUBLICATIONS STORAGE
 # ============================================
 
+@st.cache_data(ttl=300)
 def load_publications(orcid=None):
     """
     Load publications from HF Dataset.
     If orcid is provided, filter by researcher ORCID.
-    Returns list (empty on error).
+    Returns list (empty on error). Cached for 5 minutes.
     """
     if not is_hf_configured():
         return []
@@ -183,17 +220,30 @@ def load_publications(orcid=None):
     return all_publications
 
 def save_publications(publications):
-    """Save publications to HF Dataset (thread-safe)"""
-    wrapped = {
-        "schema_version": SCHEMA_VERSION,
-        "data": publications,
-        "updated_at": datetime.now().isoformat(),
-    }
-    with _write_lock:
-        return _retry(
-            lambda: _hf_upload_json("publications.json", wrapped, "Update publications data"),
-            attempts=3, base_delay=2,
-        )
+    """
+    Save publications to HF Dataset (thread-safe, with optimistic concurrency).
+    Retries up to 3 times if a concurrent write conflict is detected.
+    """
+    for attempt in range(3):
+        _, sha, _ = _hf_download_json_with_sha("publications.json")
+        wrapped = {
+            "schema_version": SCHEMA_VERSION,
+            "data": publications,
+            "updated_at": datetime.now().isoformat(),
+        }
+        with _write_lock:
+            result = _retry(
+                lambda s=sha: _hf_upload_json(
+                    "publications.json", wrapped, "Update publications data", expected_sha=s
+                ),
+                attempts=2, base_delay=1,
+            )
+        if result[0] or "conflict" not in str(result[1]):
+            break
+        if attempt < 2:
+            time.sleep(1 + attempt)
+    load_publications.clear()
+    return result
 
 def add_publication(pub_data):
     """Add or update a single publication"""
@@ -411,57 +461,87 @@ def load_error_log():
 
 
 # ============================================
-# COMPATIBILITY LAYER (SQL-style queries → HF Dataset)
+# EXPLICIT QUERY HELPERS (replaces fragile SQL shim)
 # ============================================
+
+def get_publication_metrics():
+    """Return aggregate metrics dict: total_pubs, total_citations, avg_citations, oa_count."""
+    pubs = load_publications()
+    if not pubs:
+        return {"total_pubs": 0, "total_citations": 0, "avg_citations": 0.0,
+                "oa_count": 0, "count": 0, "citations": 0}
+    df = pd.DataFrame(pubs)
+    total = len(df)
+    total_cit = int(df["citation_count"].sum()) if "citation_count" in df.columns else 0
+    avg_cit   = float(df["citation_count"].mean()) if "citation_count" in df.columns else 0.0
+    oa        = int(df["open_access"].sum())        if "open_access"    in df.columns else 0
+    return {
+        "total_pubs": total, "count": total,
+        "total_citations": total_cit, "citations": total_cit,
+        "avg_citations": avg_cit, "oa_count": oa,
+    }
+
+
+def get_publications_sorted(sort_by: str = "year", limit: int = 0) -> list:
+    """Return publications sorted by 'year' or 'citations'. Optionally limit count."""
+    pubs = load_publications()
+    if not pubs:
+        return []
+    df = pd.DataFrame(pubs)
+    if sort_by == "citations" and "citation_count" in df.columns:
+        df = df.sort_values("citation_count", ascending=False, na_position="last")
+    elif "publication_year" in df.columns:
+        df = df.sort_values(["publication_year", "citation_count"],
+                            ascending=[False, False], na_position="last")
+    if limit > 0:
+        df = df.head(limit)
+    return df.to_dict("records")
+
+
+def get_citation_sorted_counts() -> list:
+    """Return citation counts in descending order — used for h-index calculation."""
+    pubs = load_publications()
+    if not pubs:
+        return []
+    df = pd.DataFrame(pubs)
+    if "citation_count" not in df.columns:
+        return []
+    return sorted(df["citation_count"].dropna().tolist(), reverse=True)
+
+
+# ── Backwards-compatible execute_query shim ────────────────────────────────────
 
 def execute_query(sql, params=None):
     """
-    Compatibility shim — converts SQL-like queries to HF Dataset operations.
-    Mirrors the interface previously used for Cloudflare D1.
+    Thin routing shim that delegates to the explicit helpers above.
+    Kept for backwards compatibility; prefer the explicit functions for new code.
     """
-    publications = load_publications()
-    if not publications:
-        return [], None
+    sql_lower = (sql or "").lower().strip()
 
-    df = pd.DataFrame(publications)
-    sql_lower = sql.lower().strip()
-
-    # Aggregate query used by the dashboard metrics block
     if "coalesce" in sql_lower or "case when" in sql_lower:
-        total = len(df)
-        total_cit = int(df['citation_count'].sum()) if 'citation_count' in df else 0
-        avg_cit = float(df['citation_count'].mean()) if 'citation_count' in df else 0.0
-        oa = int(df['open_access'].sum()) if 'open_access' in df else 0
-        max_year = df['publication_year'].max() if 'publication_year' in df else None
-        result = [{
-            "count": total,
-            "total_pubs": total,
-            "total_citations": total_cit,
-            "citations": total_cit,
-            "avg_citations": avg_cit,
-            "oa_count": oa,
-            "latest_year": max_year,
-        }]
-        return result, None
+        return [get_publication_metrics()], None
 
     if sql_lower.startswith("select count(*)"):
-        return [{"count": len(df)}], None
+        pubs = load_publications()
+        return [{"count": len(pubs)}], None
+
+    if "citation_count desc" in sql_lower:
+        limit = 0
+        if "limit" in sql_lower:
+            try:
+                limit = int(sql_lower.split("limit")[1].strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+        return get_publications_sorted("citations", limit), None
 
     if sql_lower.startswith("select "):
-        if "order by" in sql_lower:
-            if "publication_year desc" in sql_lower:
-                df = df.sort_values("publication_year", ascending=False, na_position='last')
-            elif "citation_count desc" in sql_lower:
-                df = df.sort_values("citation_count", ascending=False, na_position='last')
+        limit = 0
         if "limit" in sql_lower:
-            parts = sql_lower.split("limit")
-            if len(parts) > 1:
-                try:
-                    limit = int(parts[1].strip().split()[0])
-                    df = df.head(limit)
-                except (ValueError, IndexError):
-                    pass
-        return df.to_dict('records'), None
+            try:
+                limit = int(sql_lower.split("limit")[1].strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+        return get_publications_sorted("year", limit), None
 
     return [], None
 

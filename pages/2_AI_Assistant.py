@@ -157,7 +157,7 @@ def _paper_cache_key(paper: dict, action: str) -> str:
 def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None, str | None]:
     try:
         req = AIRequest(message=message)
-    except ValidationError as e:
+    except ValidationError:
         return None, "Your message could not be processed. Please rephrase and try again."
     system = (
         "You are an expert academic research assistant. "
@@ -180,10 +180,15 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None
     except Exception:
         st.session_state["_rag_retrieved"] = []
 
+    # ── File context (uploaded PDF / image description) ───────────────────────
+    file_ctx = st.session_state.get("uploaded_file_context", "")
+    if file_ctx:
+        system += f"\n\nAttached document content:\n{file_ctx[:4000]}"
+
     if paper:
         system += _paper_context(paper)
 
-    messages = [{"role": "system", "content": system}]
+    messages: list[dict] = [{"role": "system", "content": system}]
     for m in st.session_state.get("chat_history", [])[-6:]:
         messages.append({"role": m["role"], "content": m["content"]})
     messages.append({"role": "user", "content": req.message})
@@ -201,6 +206,69 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None
         )
         log_audit("ai_chat", "ok")
         return resp.choices[0].message.content, None
+    except Exception:
+        return None, "AI service temporarily unavailable"
+
+
+def _build_chat_messages(message: str, paper: dict | None) -> tuple[list[dict], str | None]:
+    """Build the messages list for a chat turn, injecting RAG + file context."""
+    system = (
+        "You are an expert academic research assistant. "
+        "Be precise, concise, and professional. "
+        "Format answers with clear paragraphs and plain numbered or bulleted lists."
+    )
+    try:
+        from utils.rag import retrieve, format_context
+        all_pubs, _ = execute_query("SELECT * FROM publications")
+        if all_pubs:
+            retrieved = retrieve(message, all_pubs, top_k=3)
+            rag_ctx   = format_context(retrieved)
+            if rag_ctx:
+                system += rag_ctx
+                st.session_state["_rag_retrieved"] = retrieved
+        else:
+            st.session_state["_rag_retrieved"] = []
+    except Exception:
+        st.session_state["_rag_retrieved"] = []
+
+    file_ctx = st.session_state.get("uploaded_file_context", "")
+    if file_ctx:
+        system += f"\n\nAttached document content:\n{file_ctx[:4000]}"
+
+    if paper:
+        system += _paper_context(paper)
+
+    msgs: list[dict] = [{"role": "system", "content": system}]
+    for m in st.session_state.get("chat_history", [])[-6:]:
+        msgs.append({"role": m["role"], "content": m["content"]})
+    msgs.append({"role": "user", "content": message})
+    return msgs, None
+
+
+def _stream_response_into_container(messages: list[dict]) -> tuple[str | None, str | None]:
+    """Stream the AI response into the current Streamlit container; returns (full_text, error)."""
+    allowed, wait = _rate_check("chat")
+    if not allowed:
+        return None, f"Rate limit exceeded — wait {wait}s"
+    client, err = _groq_client()
+    if not client:
+        return None, err
+
+    def _gen():
+        stream = client.chat.completions.create(
+            model=get_secret("AI_MODEL") or "llama-3.3-70b-versatile",
+            messages=messages, temperature=0.7, max_tokens=1500,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
+    try:
+        full_text: str = st.write_stream(_gen())
+        log_audit("ai_chat", "streamed")
+        return full_text, None
     except Exception:
         return None, "AI service temporarily unavailable"
 
@@ -437,7 +505,11 @@ for key, val in [
     ("last_action_result", None),
     ("_rag_retrieved", []),
     ("_rag_index_cache", {}),
-    ("confirm_clear_chat", False), # Added for chat clear confirmation
+    ("confirm_clear_chat", False),
+    ("uploaded_file_context", ""),
+    ("uploaded_file_name", ""),
+    ("conversation_sessions", {}),
+    ("current_session_name", "Session 1"),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -597,6 +669,104 @@ if st.session_state.pending_action and paper:
         )
 
 
+# ── Conversation History ──────────────────────────────────────────────────────
+
+with st.expander(
+    f"💬 Conversation History  "
+    f"({len(st.session_state.conversation_sessions)} saved)",
+    expanded=False,
+):
+    sessions = st.session_state.conversation_sessions
+    if sessions:
+        _sess_cols = st.columns([3, 1, 1])
+        with _sess_cols[0]:
+            _load_name = st.selectbox(
+                "Saved sessions", list(sessions.keys()),
+                label_visibility="collapsed",
+                key="_load_session_select",
+            )
+        with _sess_cols[1]:
+            if st.button("📂 Load", use_container_width=True, key="_load_session_btn"):
+                if _load_name and _load_name in sessions:
+                    st.session_state.chat_history = list(sessions[_load_name])
+                    st.session_state.current_session_name = _load_name
+                    st.rerun()
+        with _sess_cols[2]:
+            if st.button("🗑 Delete", use_container_width=True, key="_del_session_btn"):
+                if _load_name and _load_name in sessions:
+                    del st.session_state.conversation_sessions[_load_name]
+                    st.rerun()
+    else:
+        st.caption("No saved sessions yet — save the current chat below.")
+
+    st.divider()
+    _save_cols = st.columns([3, 1])
+    with _save_cols[0]:
+        _new_name = st.text_input(
+            "Session name",
+            value=st.session_state.current_session_name,
+            label_visibility="collapsed",
+            placeholder="Name this conversation…",
+            key="_save_session_name",
+        )
+    with _save_cols[1]:
+        if st.button("💾 Save", use_container_width=True, key="_save_session_btn",
+                     disabled=not st.session_state.chat_history):
+            _sname = (_new_name or st.session_state.current_session_name).strip()
+            if _sname:
+                st.session_state.conversation_sessions[_sname] = list(
+                    st.session_state.chat_history
+                )
+                st.session_state.current_session_name = _sname
+                st.success(f"Saved as "{_sname}"")
+
+
+# ── File Upload ───────────────────────────────────────────────────────────────
+
+with st.expander(
+    "📎 Attach a file  "
+    + (f"(**{html.escape(st.session_state.uploaded_file_name)}** loaded)"
+       if st.session_state.uploaded_file_name else "(PDF or image)"),
+    expanded=False,
+):
+    _up = st.file_uploader(
+        "Attach PDF or image",
+        type=["pdf", "png", "jpg", "jpeg", "webp"],
+        label_visibility="collapsed",
+        key="_file_uploader",
+    )
+    if _up is not None and _up.name != st.session_state.uploaded_file_name:
+        with st.spinner("Processing file…"):
+            _ctx = ""
+            if _up.type == "application/pdf":
+                try:
+                    from utils.pdf_extractor import extract_text
+                    _ctx, _err = extract_text(_up.read())
+                    if _err:
+                        st.warning(f"⚠️ PDF extraction issue: {_err}")
+                        _ctx = _ctx or ""
+                except Exception as _exc:
+                    st.warning(f"⚠️ Could not extract PDF text: {_exc}")
+            else:
+                _ctx = (
+                    f"[Image attached: {html.escape(_up.name)}. "
+                    "Describe its content in your question for best results.]"
+                )
+        st.session_state.uploaded_file_context = _ctx
+        st.session_state.uploaded_file_name    = _up.name
+        if _ctx:
+            st.success(
+                f"✅ {html.escape(_up.name)} loaded — "
+                f"{len(_ctx):,} characters of context available."
+            )
+
+    if st.session_state.uploaded_file_name:
+        if st.button("✕ Clear file", key="_clear_file_btn"):
+            st.session_state.uploaded_file_context = ""
+            st.session_state.uploaded_file_name    = ""
+            st.rerun()
+
+
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
 st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
@@ -673,19 +843,20 @@ for _i, msg in enumerate(st.session_state.chat_history):
 if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
     try:
         req = AIRequest(message=user_input)
-    except ValidationError as e:
+    except ValidationError:
         st.error("❌ Your message could not be processed. Please try rephrasing it.")
         st.stop()
 
     st.session_state.chat_history.append({"role": "user", "content": req.message})
     with st.chat_message("user"):
         st.markdown(req.message)
+
+    messages, _ = _build_chat_messages(req.message, paper)
+
     with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
-            response, error = get_ai_response(req.message, paper)
+        response, error = _stream_response_into_container(messages)
         if response:
-            st.markdown(response)
-            # RAG indicator
+            # RAG indicator shown after streaming completes
             retrieved = st.session_state.get("_rag_retrieved", [])
             if retrieved:
                 titles = " · ".join(
@@ -693,7 +864,7 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
                     else f'"{p.get("title", "")}"'
                     for p in retrieved
                 )
-                st.caption(f"📚 Context from your database ({len(retrieved)} papers): {titles}")
+                st.caption(f"📚 {len(retrieved)} paper(s) from your database: {titles}")
             ai_msg: dict = {"role": "assistant", "content": response}
             if retrieved:
                 ai_msg["rag_count"]   = len(retrieved)

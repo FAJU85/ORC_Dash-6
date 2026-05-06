@@ -268,6 +268,8 @@ def save_publications(publications):
 
 def add_publication(pub_data):
     """Add or update a single publication"""
+    if not pub_data.get('id'):
+        return (False, 'Publication must have a non-empty id')
     publications = load_publications()
     for i, p in enumerate(publications):
         if p.get('id') == pub_data.get('id'):
@@ -312,10 +314,7 @@ def sync_from_openalex(orcid, force=False):
             )
             # Add polite-pool email to User-Agent if configured
             polite_email = os.environ.get("OPEN_ALEX", "")
-            user_agent = (
-                f"ORC-Dashboard/1.0 (mailto:{polite_email})" if polite_email
-                else "ORC-Dashboard/1.0"
-            )
+            user_agent = f"ORC-Dashboard/1.0 (mailto:{polite_email})" if polite_email else "ORC-Dashboard/1.0"
             # Retry with backoff
             resp = None
             for attempt in range(3):

@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from collections import Counter
 import sys
 import os
+import json # Added for parsing author data
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -274,7 +275,7 @@ try:
         authors = row.get("authors", [])
         if isinstance(authors, str):
             try:
-                authors = __import__("json").loads(authors)
+                authors = json.loads(authors)
             except Exception:
                 authors = []
         if not isinstance(authors, list):

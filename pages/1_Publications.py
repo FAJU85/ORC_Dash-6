@@ -6,6 +6,7 @@ import streamlit as st
 import json
 import sys
 import os
+import html # Added for escaping DOI in links
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -297,7 +298,7 @@ for pub in page_items:
     if doi:
         with btn_cols[1]:
             st.markdown(
-                f'<a href="https://doi.org/{doi}" target="_blank" '
+                f'<a href="https://doi.org/{html.escape(doi)}" target="_blank" '
                 f'style="display:inline-flex;align-items:center;gap:0.3rem;'
                 f'background:{colors["surface2"]};color:{colors["text"]};'
                 f'border:1px solid {colors["border"]};border-radius:6px;'

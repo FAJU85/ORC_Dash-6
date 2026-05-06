@@ -101,6 +101,8 @@ def hash_password(password):
         import bcrypt
         return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
     except ImportError:
+        import warnings
+        warnings.warn('bcrypt not installed — falling back to SHA-256. Install bcrypt for production use.', RuntimeWarning, stacklevel=2)
         return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(password, stored_hash):

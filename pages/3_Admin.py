@@ -729,6 +729,54 @@ if is_admin_authenticated():
                 st.info(f"ℹ️ {err or 'Cleared for this session.'}")
             st.rerun()
 
+    # ── Model routing overrides ─────────────────────────────────────────────
+    st.markdown("<div style='margin-top:1.5rem'></div>", unsafe_allow_html=True)
+    with st.expander("🔀 Model Routing Overrides", expanded=False):
+        st.caption(
+            "Set which model handles each task type. "
+            "Leave on **(auto)** to keep the default routing rule."
+        )
+        from utils.model_router import ROUTING_TABLE, GROQ_MODELS
+
+        current_routing = current_settings.get("model_routing", {})
+        model_options   = ["(auto)"] + GROQ_MODELS
+        new_routing: dict = {}
+
+        _TASK_LABELS = {
+            "quick_lookup":  "Quick factual lookup",
+            "free_chat":     "General chat",
+            "paper_summary": "Paper summary",
+            "deep_analysis": "Deep analysis",
+            "reasoning":     "Step-by-step reasoning",
+            "methodology":   "Methodology analysis",
+            "implications":  "Implications analysis",
+        }
+
+        routing_cols = st.columns(2)
+        for i, task in enumerate(ROUTING_TABLE):
+            if task == "structured_json":
+                continue  # always hardcoded; not user-overridable
+            col = routing_cols[i % 2]
+            current_val = current_routing.get(task) or "(auto)"
+            idx = model_options.index(current_val) if current_val in model_options else 0
+            with col:
+                chosen = st.selectbox(
+                    _TASK_LABELS.get(task, task),
+                    model_options, index=idx,
+                    key=f"admin_routing_{task}",
+                )
+                new_routing[task] = None if chosen == "(auto)" else chosen
+
+        if st.button("💾 Save Routing Rules", key="admin_routing_save", type="primary"):
+            merged = {**current_settings, "model_routing": new_routing}
+            ok, err = save_ai_settings(merged)
+            if ok:
+                st.success("✅ Routing rules saved.")
+                log_audit("ai_routing_updated", str(new_routing))
+            else:
+                st.session_state["_ai_settings_override"] = merged
+                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+
 # ── Footer ─────────────────────────────────────────────────────────────────
 st.divider()
 st.markdown(footer_html("🔒 All admin actions are logged"), unsafe_allow_html=True)

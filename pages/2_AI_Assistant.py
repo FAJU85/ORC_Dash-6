@@ -24,6 +24,7 @@ from utils.styles import (
 )
 from utils.prompt_builder import build_system_prompt
 from utils.hf_data import load_ai_settings
+from utils.model_router import classify_task, route_model, ModelDecision, STRUCTURED_MODEL
 
 apply_styles()
 render_navbar()
@@ -114,14 +115,25 @@ def _rate_check(key: str, max_req: int = 20) -> tuple[bool, int]:
 
 
 def _call_ai(system: str, user: str, json_mode: bool = False,
-             temperature: float = 0.5, max_tokens: int = 1800) -> tuple[str | None, str | None]:
+             temperature: float = 0.5, max_tokens: int = 1800,
+             task_type: str = "free_chat") -> tuple[str | None, str | None]:
     allowed, wait = _rate_check("general")
     if not allowed:
         return None, f"Rate limit exceeded — wait {wait}s"
     client, err = _groq_client()
     if not client:
         return None, err
-    model = get_secret("AI_MODEL") or "llama-3.3-70b-versatile"
+
+    settings = st.session_state.get("_ai_settings_override") or load_ai_settings()
+
+    if json_mode:
+        model  = get_secret("AI_MODEL") or STRUCTURED_MODEL
+        reason = "Structured output — reliable 70B anchor model"
+    else:
+        decision = route_model(task_type, settings)
+        model    = get_secret("AI_MODEL") or decision.model
+        reason   = decision.reason
+
     kwargs: dict = dict(
         model=model,
         messages=[{"role": "system", "content": system},
@@ -133,7 +145,10 @@ def _call_ai(system: str, user: str, json_mode: bool = False,
         kwargs["response_format"] = {"type": "json_object"}
     try:
         resp = client.chat.completions.create(**kwargs)
-        log_audit("ai_request", "ok")
+        log_audit("ai_request", f"model={model} task={task_type}")
+        st.session_state["_ai_last_model"]     = model
+        st.session_state["_ai_last_task_type"] = task_type
+        st.session_state["_ai_last_reason"]    = reason
         return resp.choices[0].message.content, None
     except Exception as e:
         log_error("ai_service_error", str(e), page="AI Assistant")
@@ -242,7 +257,10 @@ def _build_chat_messages(message: str, paper: dict | None) -> tuple[list[dict], 
     return msgs, None
 
 
-def _stream_response_into_container(messages: list[dict]) -> tuple[str | None, str | None]:
+def _stream_response_into_container(
+    messages: list[dict],
+    task_type: str = "free_chat",
+) -> tuple[str | None, str | None]:
     """Stream the AI response into the current Streamlit container; returns (full_text, error)."""
     allowed, wait = _rate_check("chat")
     if not allowed:
@@ -251,11 +269,18 @@ def _stream_response_into_container(messages: list[dict]) -> tuple[str | None, s
     if not client:
         return None, err
 
+    settings = st.session_state.get("_ai_settings_override") or load_ai_settings()
+    decision  = route_model(task_type, settings)
+    model     = get_secret("AI_MODEL") or decision.model
+
+    st.session_state["_ai_last_model"]     = model
+    st.session_state["_ai_last_task_type"] = task_type
+    st.session_state["_ai_last_reason"]    = decision.reason
+
     def _gen():
         stream = client.chat.completions.create(
-            model=get_secret("AI_MODEL") or "llama-3.3-70b-versatile",
-            messages=messages, temperature=0.7, max_tokens=1500,
-            stream=True,
+            model=model, messages=messages,
+            temperature=0.7, max_tokens=1500, stream=True,
         )
         for chunk in stream:
             delta = chunk.choices[0].delta.content
@@ -264,9 +289,25 @@ def _stream_response_into_container(messages: list[dict]) -> tuple[str | None, s
 
     try:
         full_text: str = st.write_stream(_gen())
-        log_audit("ai_chat", "streamed")
+        log_audit("ai_chat", f"streamed model={model} task={task_type}")
         return full_text, None
     except Exception:
+        # Fallback: try next models in chain without streaming
+        for fallback_model in decision.fallback_chain:
+            if fallback_model == model:
+                continue
+            try:
+                resp = client.chat.completions.create(
+                    model=fallback_model, messages=messages,
+                    temperature=0.7, max_tokens=1500,
+                )
+                text = resp.choices[0].message.content or ""
+                st.markdown(text)
+                st.session_state["_ai_last_model"] = fallback_model
+                log_audit("ai_chat", f"fallback model={fallback_model} task={task_type}")
+                return text, None
+            except Exception:
+                continue
         return None, "AI service temporarily unavailable"
 
 
@@ -289,9 +330,10 @@ def get_structured_response(action: str, paper: dict) -> tuple[PaperSummary | Ke
     except Exception:
         return None, None, "Invalid paper data"
     system = _get_system_base() + "\n\nRespond with valid JSON only.\n\n" + json_schema + _paper_context(paper)
+    model  = get_secret("AI_MODEL") or STRUCTURED_MODEL
     try:
         resp = client.chat.completions.create(
-            model=get_secret("AI_MODEL") or "llama-3.3-70b-versatile",
+            model=model,
             messages=[{"role": "system", "content": system},
                       {"role": "user", "content": "Analyze this paper and return the JSON."}],
             response_format={"type": "json_object"},
@@ -299,8 +341,10 @@ def get_structured_response(action: str, paper: dict) -> tuple[PaperSummary | Ke
         )
         raw = resp.choices[0].message.content
         validated = parse_action_response(action, raw)
-        log_audit("ai_structured", action)
-        # Store in cache
+        log_audit("ai_structured", f"action={action} model={model}")
+        st.session_state["_ai_last_model"]     = model
+        st.session_state["_ai_last_task_type"] = "structured_json"
+        st.session_state["_ai_last_reason"]    = "Structured output — reliable 70B anchor model"
         if validated:
             st.session_state["ai_cache"][cache_key] = validated
         return validated, raw, None
@@ -504,6 +548,9 @@ for key, val in [
     ("uploaded_file_name", ""),
     ("conversation_sessions", {}),
     ("current_session_name", "Session 1"),
+    ("_ai_last_model", ""),
+    ("_ai_last_task_type", ""),
+    ("_ai_last_reason", ""),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
@@ -846,10 +893,16 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
         st.markdown(req.message)
 
     messages, _ = _build_chat_messages(req.message, paper)
+    _task_type   = classify_task(req.message)
 
     with st.chat_message("assistant"):
-        response, error = _stream_response_into_container(messages)
+        response, error = _stream_response_into_container(messages, task_type=_task_type)
         if response:
+            # Model routing indicator
+            _last_model  = st.session_state.get("_ai_last_model", "")
+            _last_reason = st.session_state.get("_ai_last_reason", "")
+            if _last_model:
+                st.caption(f"🤖 {_last_model} — {_last_reason}")
             # RAG indicator shown after streaming completes
             retrieved = st.session_state.get("_rag_retrieved", [])
             if retrieved:

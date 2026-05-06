@@ -341,10 +341,12 @@ else:
                         st.success(f"✅ Added: {new_name or orcid_clean}")
                         log_audit("researcher_added", orcid_clean)
                         st.rerun()
+                    elif 'conflict' in (err or '').lower():
+                        st.warning('⚠️ Another update was in progress. Please try again.')
                     else:
                         st.error(f"❌ {err}")
                         if "HF_REPO_ID" in (err or ""):
-                            st.info("Add **HF_TOKEN** and **HF_REPO_ID** to your Space secrets to enable data storage.")
+                            st.info("Add HF_TOKEN and HF_REPO_ID to your Space secrets to enable data storage.")
             else:
                 st.warning("Please enter an ORCID")
 

@@ -7,6 +7,7 @@ import time
 import json
 import hashlib
 import os
+import logging
 from typing import Any, Optional
 from datetime import datetime, timedelta
 
@@ -112,8 +113,8 @@ class Cache:
         try:
             with open(cache_path, 'w') as f:
                 json.dump(cache_data, f, indent=2)
-        except IOError:
-            pass  # Fail silently if can't write
+        except IOError as e:
+            logging.getLogger(__name__).warning('Cache write failed for %s/%s: %s', namespace, key, e)
     
     def exists(self, namespace: str, key: str) -> bool:
         """Check if key exists and is not expired"""

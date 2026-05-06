@@ -25,8 +25,8 @@ def _load_neural_model():
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer("all-MiniLM-L6-v2")
         return model
-    except Exception:
-        return None
+    except Exception as e:
+        st.warning(f"RAG neural model unavailable: {type(e).__name__}. Falling back to TF-IDF."); return None
 
 
 # ── Index building ────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ def retrieve(query: str, publications: list, top_k: int = 3) -> list[dict]:
         q_emb  = model.encode([query], normalize_embeddings=True).astype("float32")
         scores = (index["embeddings"] @ q_emb.T).squeeze()
         if scores.ndim == 0:
-            return [pubs[0]]
+            scores = np.array([scores.item()])
         scores  = _apply_boosts(scores)
         top_idx = np.argsort(scores)[::-1][:k].tolist()
         return [pubs[i] for i in top_idx]

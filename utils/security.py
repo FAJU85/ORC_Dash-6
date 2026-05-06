@@ -202,7 +202,6 @@ def get_audit_log():
 
 def load_audit_log_from_hf():
     """Load persisted audit log from HF Dataset into the module-level list"""
-    global _audit_log
     try:
         from utils.hf_data import load_audit_log as hf_load
         entries = hf_load()
@@ -256,7 +255,6 @@ def clear_error_log() -> None:
 
 def load_error_log_from_hf() -> None:
     """Load persisted error log from HF Dataset into the module-level list."""
-    global _error_log
     try:
         from utils.hf_data import load_error_log as hf_load
         entries = hf_load()

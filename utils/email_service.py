@@ -226,6 +226,12 @@ def send_smtp_email(subject: str, body: str, to_email: str = "") -> tuple:
 
     if not smtp_user or not smtp_pass:
         return False, "SMTP_NOT_CONFIGURED"
+    if not smtp_host:
+        return False, "SMTP_HOST not configured"
+    try:
+        smtp_port = int(smtp_port)
+    except (ValueError, TypeError):
+        return False, f"Invalid SMTP_PORT: {smtp_port!r}"
 
     if not to_email:
         to_email = (
@@ -335,7 +341,7 @@ def create_github_issue(summary, description, steps, expected_actual, user_conta
             data = resp.json()
             log_audit("github_issue_created", data.get("html_url", ""))
             return data.get("html_url"), None
-        return None, "GitHub API error"
+        return None, f"GitHub API error {resp.status_code}: {resp.text[:120]}"
     except Exception as e:
         log_audit("github_error", type(e).__name__)
         return None, "Issue creation failed"

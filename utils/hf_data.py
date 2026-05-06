@@ -158,6 +158,7 @@ def save_researchers(researchers):
             "data": researchers,
             "updated_at": datetime.now().isoformat(),
         }
+        # sha is re-fetched at the start of each outer attempt — lambda captures current iteration sha
         # The _write_lock should be held only during the actual _hf_upload_json call,
         # not during the backoff sleep within _retry.
         def _perform_researchers_upload_with_lock(current_sha):
@@ -247,6 +248,7 @@ def save_publications(publications):
             "data": publications,
             "updated_at": datetime.now().isoformat(),
         }
+        # sha is re-fetched at the start of each outer attempt — lambda captures current iteration sha
         # The _write_lock should be held only during the actual _hf_upload_json call,
         # not during the backoff sleep within _retry.
         def _perform_publications_upload_with_lock(current_sha):

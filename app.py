@@ -27,6 +27,7 @@ pg = st.navigation(
         st.Page("pages/2_AI_Assistant.py", title="AI Assistant", icon="🤖"),
         st.Page("pages/4_Analytics.py",    title="Analytics",    icon="📊"),
         st.Page("pages/6_Settings.py",     title="Settings",     icon="⚙️"),
+        st.Page("pages/7_Bioinformatics.py", title="Bioinformatics", icon="🧬"),
         st.Page("pages/5_Bug_Report.py",   title="Bug Report",   icon="🐛"),
         st.Page("pages/3_Admin.py",        title="Admin",        icon="🔐"),
     ],

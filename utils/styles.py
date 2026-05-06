@@ -853,6 +853,7 @@ def render_navbar() -> None:
         ("pages/2_AI_Assistant.py", "🤖", "AI"),
         ("pages/4_Analytics.py",    "📊", "Analytics"),
         ("pages/6_Settings.py",     "⚙️", "Settings"),
+        ("pages/7_Bioinformatics.py", "🧬", "Bioinformatics"),
         ("pages/5_Bug_Report.py",   "🐛", "Report"),
         ("pages/3_Admin.py",        "🔐", "Admin"),
     ]

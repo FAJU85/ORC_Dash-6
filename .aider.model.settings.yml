@@ -1,0 +1,17 @@
+- name: openai/google/gemma-4-26B-A4B-it:novita
+  edit_format: diff
+  weak_model_name: openai/google/gemma-4-26B-A4B-it:novita
+  use_repo_map: true
+  send_undo_reply: false
+  lazy: false
+  reminder: sys
+  examples_as_sys_msg: false
+  extra_params:
+    max_tokens: 8192
+  cache_control: false
+  caches_by_default: false
+  use_system_prompt: true
+  use_temperature: true
+  streaming: true
+  editor_model_name: openai/google/gemma-4-26B-A4B-it:novita
+  editor_edit_format: editor-diff

@@ -6,8 +6,6 @@ Includes: structured quick actions, chat, result cache, and session export.
 import json
 import datetime
 import streamlit as st
-import pandas as pd
-import plotly.express as px
 import sys
 import os
 import html # Using module for escape
@@ -23,7 +21,6 @@ from utils.security import get_secret, execute_query, log_audit, log_error, Rate
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     footer_html, render_navbar, DARK, LIGHT,
-    chart_layout, chart_colors, PLOTLY_CONFIG,
 )
 from utils.ai_schemas import (
     AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
@@ -65,71 +62,6 @@ def _label(text: str):
         f'{html.escape(text)}</div>',
         unsafe_allow_html=True,
     )
-
-
-# ── Quick chart renderer ───────────────────────────────────────────────────────
-
-def _render_ai_chart(kind: str) -> None:
-    pubs, _ = execute_query("SELECT * FROM publications ORDER BY publication_year")
-    if not pubs:
-        st.info("No publication data available. Sync from the Publications page first.")
-        return
-    df = pd.DataFrame(pubs)
-    ccs = chart_colors()
-
-    if kind == "trend" and "publication_year" in df.columns:
-        yc = df.groupby("publication_year").size().reset_index(name="count")
-        fig = px.bar(yc, x="publication_year", y="count",
-                     labels={"publication_year": "Year", "count": "Publications"},
-                     color_discrete_sequence=[colors["accent"]])
-        fig.update_layout(**chart_layout("Publications by Year"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-    elif kind == "citations" and "citation_count" in df.columns:
-        df["citation_count"] = pd.to_numeric(df["citation_count"], errors="coerce").fillna(0)
-        fig = px.histogram(df, x="citation_count", nbins=20,
-                           labels={"citation_count": "Citations", "count": "Papers"},
-                           color_discrete_sequence=[colors["accent2"]])
-        fig.update_layout(**chart_layout("Citation Distribution"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-    elif kind == "journals" and "journal_name" in df.columns:
-        jc = df["journal_name"].value_counts().head(8).reset_index()
-        jc.columns = ["journal", "count"]
-        fig = px.pie(jc, values="count", names="journal",
-                     color_discrete_sequence=ccs, hole=0.4)
-        fig.update_layout(**chart_layout("Top Journals"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-    elif kind == "access" and "open_access" in df.columns:
-        df["open_access"] = df["open_access"].astype(str).str.lower().isin({"1", "true", "yes"})
-        oa = int(df["open_access"].sum())
-        fig = px.pie(values=[oa, len(df) - oa], names=["Open Access", "Subscription"],
-                     color_discrete_sequence=[colors["success"], colors["muted"]], hole=0.4)
-        fig.update_layout(**chart_layout("Open Access Distribution"))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-
-    else:
-        st.info("Chart data not available for the current selection.")
-
-
-def _detect_chart_intent(message: str) -> str | None:
-    """Return chart slug if the message is asking for a visualization, else None."""
-    msg = message.lower()
-    words = set(msg.replace(",", " ").replace(".", " ").split())
-    chart_words = {"chart", "graph", "plot", "histogram", "visualize",
-                   "visualization", "diagram", "figure", "draw", "show"}
-    if not (words & chart_words):
-        return None
-    if any(w in msg for w in ("year", "trend", "time", "annual", "history", "over")):
-        return "trend"
-    if any(w in msg for w in ("citation", "cited", "cites", "impact", "h-index")):
-        return "citations"
-    if any(w in msg for w in ("journal", "venue", "publisher")):
-        return "journals"
-    if any(w in msg for w in ("open access", "open-access", "access", " oa")):
-        return "access"
-    return "trend"
 
 
 def _handle_feedback(msg_idx: int, rating: int) -> None:
@@ -222,8 +154,7 @@ def _paper_cache_key(paper: dict, action: str) -> str:
     return f"{paper_id}__{action}"
 
 
-def get_ai_response(message: str, paper: dict | None = None,
-                    chart_kind: str | None = None) -> tuple[str | None, str | None]:
+def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None, str | None]:
     try:
         req = AIRequest(message=message)
     except ValidationError as e:
@@ -249,19 +180,6 @@ def get_ai_response(message: str, paper: dict | None = None,
     except Exception:
         st.session_state["_rag_retrieved"] = []
 
-    if chart_kind:
-        _chart_labels = {
-            "trend": "publications by year",
-            "citations": "citation count distribution",
-            "journals": "top journals breakdown",
-            "access": "open access vs subscription ratio",
-        }
-        system += (
-            f"\n\nA visual interactive {_chart_labels.get(chart_kind, 'data chart')} "
-            "has been generated and is displayed to the user below your response. "
-            "Briefly explain what the chart shows and what key patterns or insights "
-            "to look for. Do NOT draw ASCII art, text tables, or any text-based charts."
-        )
     if paper:
         system += _paper_context(paper)
 
@@ -517,7 +435,6 @@ for key, val in [
     ("ai_cache", {}),
     ("last_action_label", ""),
     ("last_action_result", None),
-    ("ai_active_chart", None),
     ("_rag_retrieved", []),
     ("_rag_index_cache", {}),
     ("confirm_clear_chat", False), # Added for chat clear confirmation
@@ -680,28 +597,6 @@ if st.session_state.pending_action and paper:
         )
 
 
-# ── Quick Charts ─────────────────────────────────────────────────────────────
-
-st.markdown(section_title_html("Quick Charts"), unsafe_allow_html=True)
-
-qc1, qc2, qc3, qc4 = st.columns(4)
-for _col, _lbl, _knd in [
-    (qc1, "📅 By Year",     "trend"),
-    (qc2, "📈 Citations",   "citations"),
-    (qc3, "📰 Journals",    "journals"),
-    (qc4, "🔓 Open Access", "access"),
-]:
-    with _col:
-        if st.button(_lbl, key=f"qc_{_knd}", use_container_width=True):
-            if st.session_state["ai_active_chart"] == _knd:
-                st.session_state["ai_active_chart"] = None
-            else:
-                st.session_state["ai_active_chart"] = _knd
-
-if st.session_state["ai_active_chart"]:
-    _render_ai_chart(st.session_state["ai_active_chart"])
-
-
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
 st.markdown(section_title_html("Chat"), unsafe_allow_html=True)
@@ -757,8 +652,6 @@ with ctrl3:
 for _i, msg in enumerate(st.session_state.chat_history):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg.get("chart_kind"):
-            _render_ai_chart(msg["chart_kind"])
         if msg.get("rag_count") and msg["role"] == "assistant":
             st.caption(f"📚 {msg['rag_count']} paper(s) retrieved from your database")
 
@@ -784,18 +677,14 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
         st.error("❌ Your message could not be processed. Please try rephrasing it.")
         st.stop()
 
-    chart_kind = _detect_chart_intent(req.message)
-
     st.session_state.chat_history.append({"role": "user", "content": req.message})
     with st.chat_message("user"):
         st.markdown(req.message)
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
-            response, error = get_ai_response(req.message, paper, chart_kind)
+            response, error = get_ai_response(req.message, paper)
         if response:
             st.markdown(response)
-            if chart_kind:
-                _render_ai_chart(chart_kind)
             # RAG indicator
             retrieved = st.session_state.get("_rag_retrieved", [])
             if retrieved:
@@ -806,8 +695,6 @@ if user_input := st.chat_input("Ask about your research papers…", disabled=not
                 )
                 st.caption(f"📚 Context from your database ({len(retrieved)} papers): {titles}")
             ai_msg: dict = {"role": "assistant", "content": response}
-            if chart_kind:
-                ai_msg["chart_kind"] = chart_kind
             if retrieved:
                 ai_msg["rag_count"]   = len(retrieved)
                 ai_msg["rag_pub_ids"] = [p.get("id", "") for p in retrieved]

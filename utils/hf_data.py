@@ -166,6 +166,45 @@ def save_ai_settings(settings: dict) -> tuple[bool, str | None]:
 
 
 # ============================================
+# CMS CONTENT
+# ============================================
+
+_CMS_FILE = "cms_content.json"
+
+_CMS_DEFAULTS: dict = {
+    "home_announcement": {"enabled": False, "text": "", "color": "info"},
+    "home_hero":         {"title": "", "subtitle": ""},
+    "footer_note":       "",
+}
+
+@st.cache_data(ttl=120)
+def load_cms_content() -> dict:
+    """Load CMS content from HF Dataset, merging with defaults."""
+    if not is_hf_configured():
+        return dict(_CMS_DEFAULTS)
+    data, err = _hf_download_json(_CMS_FILE)
+    if err or not isinstance(data, dict):
+        return dict(_CMS_DEFAULTS)
+    merged = dict(_CMS_DEFAULTS)
+    merged.update(data)
+    return merged
+
+
+def save_cms_content(content: dict) -> tuple[bool, str | None]:
+    """Persist CMS content to HF Dataset and clear the cache."""
+    if not is_hf_configured():
+        return False, "Storage not configured — content applies for this session only."
+    with _write_lock:
+        ok, err = _hf_upload_json(
+            _CMS_FILE, content,
+            commit_message="Update CMS content",
+        )
+    if ok:
+        load_cms_content.clear()
+    return ok, err
+
+
+# ============================================
 # RESEARCHERS MANAGEMENT
 # ============================================
 

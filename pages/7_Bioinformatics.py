@@ -154,7 +154,20 @@ def _genome_post(endpoint: str, body: dict) -> tuple[dict | None, str | None]:
     try:
         resp = requests.post(url, headers=_GENOME_HEADERS, json=body, timeout=30)
         if resp.status_code == 401:
-            return None, "Invalid or missing API key — add **ALPHA_GENOME_API_KEY** to your space secrets."
+            return None, (
+                "Invalid or missing API key. "
+                "Add **ALPHA_GENOME_API_KEY** to your space secrets."
+            )
+        if resp.status_code == 403:
+            return None, (
+                "Access denied. Your API key may not have permission for this endpoint."
+            )
+        if resp.status_code == 404:
+            return None, (
+                "Genomic analysis endpoint not found. "
+                "This service requires approved API access — "
+                "verify **ALPHA_GENOME_BASE_URL** in your secrets or contact your API provider."
+            )
         if resp.status_code == 400:
             detail = resp.json().get("error", {}).get("message", resp.text[:200])
             return None, f"Bad request: {detail}"
@@ -162,6 +175,11 @@ def _genome_post(endpoint: str, body: dict) -> tuple[dict | None, str | None]:
         return resp.json(), None
     except requests.Timeout:
         return None, "Request timed out — try a shorter sequence."
+    except requests.ConnectionError:
+        return None, (
+            "Cannot reach the genomic analysis service. "
+            "Check your network connection or **ALPHA_GENOME_BASE_URL**."
+        )
     except requests.RequestException as exc:
         log_error("genome_api", str(exc), page="Bioinformatics")
         return None, f"Service unavailable: {exc}"

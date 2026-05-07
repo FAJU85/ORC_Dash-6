@@ -848,14 +848,14 @@ def render_navbar() -> None:
     it is available on every page without repeating code in each page file.
     """
     _PAGES = [
-        ("pages/0_Home.py",         "🏠", "Home"),
-        ("pages/1_Publications.py", "📚", "Publications"),
-        ("pages/2_AI_Assistant.py", "🤖", "AI"),
-        ("pages/4_Analytics.py",    "📊", "Analytics"),
-        ("pages/6_Settings.py",     "⚙️", "Settings"),
+        ("pages/0_Home.py",           "🏠", "Home"),
+        ("pages/1_Publications.py",   "📚", "Publications"),
+        ("pages/2_AI_Assistant.py",   "🤖", "AI"),
         ("pages/7_Bioinformatics.py", "🧬", "Bioinformatics"),
-        ("pages/5_Bug_Report.py",   "🐛", "Report"),
-        ("pages/3_Admin.py",        "🔐", "Admin"),
+        ("pages/4_Analytics.py",      "📊", "Analytics"),
+        ("pages/6_Settings.py",       "⚙️", "Settings"),
+        ("pages/5_Bug_Report.py",     "🐛", "Report"),
+        ("pages/3_Admin.py",          "🔐", "Admin"),
     ]
     all_cols = st.columns([1.5] + [1] * len(_PAGES) + [0.85])
     logo_col  = all_cols[0]
@@ -877,23 +877,26 @@ def render_navbar() -> None:
 
 
 def footer_html(extra: str = "") -> str:
-    """
-    Builds a centered footer HTML block containing product/version, an optional extra line, and a "Built by" credit link.
-    
-    Uses the active theme to select muted and accent colors for text and link styling.
-    
-    Parameters:
-        extra (str): Optional HTML content rendered as an additional paragraph below the version line. If empty, no extra paragraph is included.
-    
-    Returns:
-        html (str): An HTML string for a centered footer styled according to the current theme.
-    """
     c = DARK if get_theme() == "dark" else LIGHT
     extra_line = f"<p style='margin:0.1rem 0 0'>{extra}</p>" if extra else ""
+    # CMS footer note (loaded lazily to avoid circular imports)
+    cms_note = ""
+    try:
+        import streamlit as _st
+        _cms = _st.session_state.get("_cms_override") or {}
+        _note = _cms.get("footer_note", "").strip()
+        if not _note:
+            from utils.hf_data import load_cms_content as _lcms
+            _note = _lcms().get("footer_note", "").strip()
+        if _note:
+            cms_note = f"<p style='margin:0.1rem 0 0'>{_note}</p>"
+    except Exception:
+        pass
     return (
         f'<div style="text-align:center;color:{c["muted"]};font-size:0.78rem;padding:0.5rem 0 1rem">'
         f'  <p style="margin:0">ORC Research Dashboard · v1.0</p>'
         f'  {extra_line}'
+        f'  {cms_note}'
         f'  <p style="margin:0.2rem 0 0">Built by '
         f'    <a href="https://www.linkedin.com/in/fahad-al-jubalie-55973926/" '
         f'       target="_blank" rel="noopener noreferrer" style="color:{c["accent"]};text-decoration:none;font-weight:500">'

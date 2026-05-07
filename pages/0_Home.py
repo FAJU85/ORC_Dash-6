@@ -16,6 +16,7 @@ from utils.security import (
 from utils.hf_data import (
     load_publications, get_active_researchers,
     get_publication_metrics, get_citation_sorted_counts, get_publications_sorted,
+    load_cms_content,
 )
 from utils.styles import (
     apply_styles, get_theme, render_navbar,
@@ -29,12 +30,21 @@ render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
 
+# ── CMS content ───────────────────────────────────────────────────────────────
+_cms = st.session_state.get("_cms_override") or load_cms_content()
+
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown(
-    hero_html("🔬 ORC Research Dashboard",
-              "Academic Analytics & Publication Intelligence Platform"),
-    unsafe_allow_html=True,
-)
+_hero = _cms.get("home_hero", {})
+_hero_title    = _hero.get("title",    "").strip() or "🔬 ORC Research Dashboard"
+_hero_subtitle = _hero.get("subtitle", "").strip() or "Academic Analytics & Publication Intelligence Platform"
+st.markdown(hero_html(_hero_title, _hero_subtitle), unsafe_allow_html=True)
+
+# ── Announcement banner ───────────────────────────────────────────────────────
+_ann = _cms.get("home_announcement", {})
+if _ann.get("enabled") and _ann.get("text", "").strip():
+    _ann_color = _ann.get("color", "info")
+    _ann_fn    = {"info": st.info, "success": st.success, "warning": st.warning}.get(_ann_color, st.info)
+    _ann_fn(_ann.get("text", ""))
 
 # ── Research Metrics ─────────────────────────────────────────────────────────
 st.markdown(section_title_html("Research Metrics"), unsafe_allow_html=True)

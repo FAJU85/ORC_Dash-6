@@ -25,6 +25,7 @@ from utils.hf_data import (
     load_publications, sync_from_openalex, load_researchers,
     flush_audit_log, flush_error_log,
     load_ai_settings, save_ai_settings,
+    load_cms_content, save_cms_content,
 )
 from utils.prompt_builder import preview_integration
 from utils.styles import (
@@ -775,6 +776,70 @@ if is_admin_authenticated():
                 log_audit("ai_routing_updated", str(new_routing))
             else:
                 st.session_state["_ai_settings_override"] = merged
+                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+
+# ── CMS — Content Management ───────────────────────────────────────────────
+if is_admin_authenticated():
+    st.markdown(section_title_html("📝 Content Management"), unsafe_allow_html=True)
+    st.caption("Customize text and announcements displayed across the dashboard.")
+
+    cms = load_cms_content()
+
+    # ── Home page announcement banner ───────────────────────────────────────
+    with st.expander("📢 Home Page Announcement", expanded=False):
+        ann = cms.get("home_announcement", {})
+        ann_enabled = st.toggle("Show announcement banner", value=bool(ann.get("enabled", False)),
+                                key="cms_ann_enabled")
+        ann_text = st.text_area("Announcement text", value=ann.get("text", ""),
+                                height=80, key="cms_ann_text",
+                                placeholder="e.g. Dashboard maintenance scheduled for Sunday 2am UTC.")
+        ann_color = st.selectbox("Banner style", ["info", "success", "warning"],
+                                 index=["info", "success", "warning"].index(ann.get("color", "info")),
+                                 key="cms_ann_color")
+        if st.button("💾 Save Announcement", key="cms_ann_save", type="primary"):
+            new_cms = {**cms, "home_announcement": {
+                "enabled": ann_enabled, "text": ann_text.strip(), "color": ann_color
+            }}
+            ok, err = save_cms_content(new_cms)
+            if ok:
+                st.success("✅ Announcement saved.")
+                log_audit("cms_announcement_updated", ann_text[:80])
+            else:
+                st.session_state["_cms_override"] = new_cms
+                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+
+    # ── Home page hero text ─────────────────────────────────────────────────
+    with st.expander("🏠 Home Page Hero Text", expanded=False):
+        hero = cms.get("home_hero", {})
+        hero_title    = st.text_input("Hero title (leave blank for default)",
+                                      value=hero.get("title", ""), key="cms_hero_title")
+        hero_subtitle = st.text_input("Hero subtitle (leave blank for default)",
+                                      value=hero.get("subtitle", ""), key="cms_hero_subtitle")
+        if st.button("💾 Save Hero Text", key="cms_hero_save", type="primary"):
+            new_cms = {**cms, "home_hero": {
+                "title": hero_title.strip(), "subtitle": hero_subtitle.strip()
+            }}
+            ok, err = save_cms_content(new_cms)
+            if ok:
+                st.success("✅ Hero text saved.")
+                log_audit("cms_hero_updated", hero_title[:60])
+            else:
+                st.session_state["_cms_override"] = new_cms
+                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+
+    # ── Footer note ─────────────────────────────────────────────────────────
+    with st.expander("🔻 Footer Note", expanded=False):
+        footer_note = st.text_input("Custom footer note (leave blank for default)",
+                                    value=cms.get("footer_note", ""), key="cms_footer_note",
+                                    placeholder="e.g. For internal use only.")
+        if st.button("💾 Save Footer Note", key="cms_footer_save", type="primary"):
+            new_cms = {**cms, "footer_note": footer_note.strip()}
+            ok, err = save_cms_content(new_cms)
+            if ok:
+                st.success("✅ Footer note saved.")
+                log_audit("cms_footer_updated", footer_note[:60])
+            else:
+                st.session_state["_cms_override"] = new_cms
                 st.info(f"ℹ️ {err or 'Saved for this session.'}")
 
 # ── Footer ─────────────────────────────────────────────────────────────────

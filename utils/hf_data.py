@@ -41,12 +41,20 @@ _write_lock = threading.Lock()
 # ============================================
 
 def get_repo_id() -> str | None:
-    """Get the Hugging Face repo ID for data storage"""
-    return os.environ.get("HF_REPO_ID") or None
+    """Get the Hugging Face repo ID from secrets, falling back to env var."""
+    try:
+        from utils.security import get_secret as _gs
+        return _gs("HF_REPO_ID") or os.environ.get("HF_REPO_ID") or None
+    except Exception:
+        return os.environ.get("HF_REPO_ID") or None
 
 def get_hf_token() -> str | None:
-    """Get Hugging Face token from environment"""
-    return os.environ.get("HF_TOKEN") or None
+    """Get the Hugging Face token from secrets, falling back to env var."""
+    try:
+        from utils.security import get_secret as _gs
+        return _gs("HF_TOKEN") or os.environ.get("HF_TOKEN") or None
+    except Exception:
+        return os.environ.get("HF_TOKEN") or None
 
 def is_hf_configured() -> bool:
     """Check if Hugging Face is properly configured"""
@@ -162,6 +170,57 @@ def save_ai_settings(settings: dict) -> tuple[bool, str | None]:
         )
     if ok:
         load_ai_settings.clear()
+    return ok, err
+
+
+# ============================================
+# CMS CONTENT
+# ============================================
+
+_CMS_FILE = "cms_content.json"
+
+_CMS_DEFAULTS: dict = {
+    "home_announcement": {"enabled": False, "text": "", "color": "info"},
+    "home_hero":         {"title": "", "subtitle": ""},
+    "footer_note":       "",
+}
+
+@st.cache_data(ttl=120)
+def load_cms_content() -> dict:
+    """Load CMS content from HF Dataset, merging with defaults."""
+    if not is_hf_configured():
+        return dict(_CMS_DEFAULTS)
+    data, err = _hf_download_json(_CMS_FILE)
+    if err or not isinstance(data, dict):
+        return dict(_CMS_DEFAULTS)
+    merged = dict(_CMS_DEFAULTS)
+    for key, default_val in _CMS_DEFAULTS.items():
+        incoming = data.get(key)
+        if incoming is None:
+            continue
+        if not isinstance(incoming, type(default_val)):
+            continue  # wrong type — keep default
+        if isinstance(default_val, dict):
+            # Validate sub-keys too: accept only if it's a proper dict
+            if isinstance(incoming, dict):
+                merged[key] = {**default_val, **{k: v for k, v in incoming.items()
+                                                  if k in default_val}}
+        else:
+            merged[key] = incoming
+    return merged
+
+
+def save_cms_content(content: dict) -> tuple[bool, str | None]:
+    """Persist CMS content to HF Dataset and clear the cache."""
+    if not is_hf_configured():
+        return False, "Storage not configured — content applies for this session only."
+    with _write_lock:
+        ok, err = _hf_upload_json(
+            _CMS_FILE, content,
+            commit_message="Update CMS content",
+        )
+    if ok:
+        load_cms_content.clear()
     return ok, err
 
 

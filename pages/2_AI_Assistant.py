@@ -585,8 +585,8 @@ try:
     if _rag_count:
         _kind = index_kind(_rag_pubs)
         _kind_label = {
-            "neural": "🧠 Neural",
-            "tfidf":  "🔤 TF-IDF fallback",
+            "neural": "🧠 Enhanced",
+            "tfidf":  "📖 Standard",
             "empty":  "⚠️ Unavailable",
         }.get(_kind, _kind)
         _fb  = _fb_stats()
@@ -598,7 +598,7 @@ try:
             f'<div style="background:{colors["surface"]};border-radius:6px;'
             f'padding:0.5rem 1rem;margin-bottom:0.75rem;font-size:0.8rem;'
             f'border-left:3px solid {colors["success"]};color:{colors["text2"]}">'
-            f'📚 RAG active — {_rag_count} papers indexed · {_kind_label}{_fb_part}'
+            f'📚 Knowledge base active — {_rag_count} papers indexed · {_kind_label}{_fb_part}'
             f'</div>',
             unsafe_allow_html=True,
         )

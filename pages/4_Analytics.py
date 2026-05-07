@@ -15,7 +15,7 @@ import json # Added for parsing author data
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.hf_data import get_active_researchers, load_publications, get_publications_sorted
+from utils.hf_data import get_active_researchers, load_publications, get_publications_sorted, load_cms_content
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     metric_card_html, footer_html, chart_layout, chart_colors,
@@ -26,9 +26,16 @@ apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 
-st.markdown(hero_html("📈 Analytics", "Research metrics, publication trends, and collaboration insights"),
-            unsafe_allow_html=True)
+_analytics_hero = _cms.get("analytics_hero", {})
+st.markdown(
+    hero_html(
+        _analytics_hero.get("title", "").strip() or "📈 Analytics",
+        _analytics_hero.get("subtitle", "").strip() or "Research metrics, publication trends, and collaboration insights",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Researcher Filter ────────────────────────────────────────────────────────
 researchers = get_active_researchers()

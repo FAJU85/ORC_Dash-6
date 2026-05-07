@@ -13,6 +13,7 @@ import streamlit as st
 import requests
 
 from utils.security import get_secret, log_audit, log_error, RateLimiter
+from utils.hf_data import load_cms_content
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
     footer_html, render_navbar, DARK, LIGHT,
@@ -22,6 +23,7 @@ apply_styles()
 render_navbar()
 
 colors      = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 rate_limiter = RateLimiter()
 
 # ── Genomic analysis API config (from secrets) ────────────────────────────────
@@ -127,7 +129,8 @@ def _search_uniprot(query: str) -> list[dict]:
             org   = r.get("organism", {}).get("scientificName", "")
             out.append({"id": pid, "protein": pname, "gene": gene, "organism": org})
         return out
-    except Exception:
+    except Exception as exc:
+        log_error("uniprot_search", str(exc), page="Bioinformatics")
         return []
 
 
@@ -228,9 +231,12 @@ def _analyse_region(chrom: str, start: int, end: int,
 # Page
 # ══════════════════════════════════════════════════════════════════════════════
 
+_bio_hero = _cms.get("bioinformatics_hero", {})
 st.markdown(
-    hero_html("🧬 Bioinformatics",
-              "Protein structure prediction · Genomic sequence & variant analysis"),
+    hero_html(
+        _bio_hero.get("title", "").strip() or "🧬 Bioinformatics",
+        _bio_hero.get("subtitle", "").strip() or "Protein structure prediction · Genomic sequence & variant analysis",
+    ),
     unsafe_allow_html=True,
 )
 
@@ -345,7 +351,7 @@ with tab_protein:
 
                 # Downloads
                 st.markdown(section_title_html("Downloads"), unsafe_allow_html=True)
-                dl1, dl2, dl3 = st.columns(3)
+                dl1, dl2 = st.columns(2)
                 with dl1:
                     if model_url:
                         st.markdown(_link_btn("⬇️ PDB Structure", model_url, primary=True),
@@ -354,12 +360,6 @@ with tab_protein:
                     if cif_url:
                         st.markdown(_link_btn("⬇️ mmCIF Structure", cif_url),
                                     unsafe_allow_html=True)
-                with dl3:
-                    st.markdown(
-                        _link_btn("🔗 View in Database",
-                                  f"https://alphafold.ebi.ac.uk/entry/{uid}"),
-                        unsafe_allow_html=True,
-                    )
 
                 with st.expander("📋 Full response"):
                     st.json(entry)

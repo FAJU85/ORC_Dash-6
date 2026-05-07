@@ -23,13 +23,14 @@ from utils.styles import (
     footer_html, render_navbar, DARK, LIGHT,
 )
 from utils.prompt_builder import build_system_prompt
-from utils.hf_data import load_ai_settings
+from utils.hf_data import load_ai_settings, load_cms_content
 from utils.model_router import classify_task, route_model, ModelDecision, STRUCTURED_MODEL
 
 apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 rate_limiter = RateLimiter()
 
 
@@ -558,9 +559,12 @@ for key, val in [
 
 # ── Page ──────────────────────────────────────────────────────────────────────
 
+_ai_hero = _cms.get("ai_assistant_hero", {})
 st.markdown(
-    hero_html("🔬 AI Research Assistant",
-              "Structured analysis and Q&A — results are remembered within your session"),
+    hero_html(
+        _ai_hero.get("title", "").strip() or "🔬 AI Research Assistant",
+        _ai_hero.get("subtitle", "").strip() or "Structured analysis and Q&A — results are remembered within your session",
+    ),
     unsafe_allow_html=True,
 )
 
@@ -662,10 +666,10 @@ if paper:
 
 qa1, qa2, qa3, qa4 = st.columns(4)
 for col, label, action in [
-    (qa1, "📝 Summarize",    "summarize"),
-    (qa2, "🔍 Key Findings", "findings"),
-    (qa3, "📊 Methodology",  "methodology"),
-    (qa4, "🔗 Implications", "implications"),
+    (qa1, _cms.get("ai_btn_summarize",   "").strip() or "📝 Summarize",    "summarize"),
+    (qa2, _cms.get("ai_btn_findings",    "").strip() or "🔍 Key Findings", "findings"),
+    (qa3, _cms.get("ai_btn_methodology", "").strip() or "📊 Methodology",  "methodology"),
+    (qa4, _cms.get("ai_btn_implications","").strip() or "🔗 Implications", "implications"),
 ]:
     with col:
         if st.button(label, use_container_width=True, disabled=not paper or not _ai_available):
@@ -881,7 +885,8 @@ for _i, msg in enumerate(st.session_state.chat_history):
         else:
             st.caption("✓ Helpful" if _rating == 1 else "✓ Feedback noted")
 
-if user_input := st.chat_input("Ask about your research papers…", disabled=not _ai_available):
+_ai_placeholder = _cms.get("ai_input_placeholder", "").strip() or "Ask about your research papers…"
+if user_input := st.chat_input(_ai_placeholder, disabled=not _ai_available):
     try:
         req = AIRequest(message=user_input)
     except ValidationError:

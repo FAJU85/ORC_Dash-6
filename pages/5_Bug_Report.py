@@ -11,12 +11,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import sanitize_string, validate_email, log_audit, RateLimiter
 from utils.email_service import send_bug_report_notification, create_github_issue
+from utils.hf_data import load_cms_content
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, DARK, LIGHT
 
 apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -31,7 +33,14 @@ if "github_url" not in st.session_state:
 # PAGE
 # ============================================
 
-st.markdown(hero_html("🐛 Bug Report", "Help us improve by reporting issues you encounter"), unsafe_allow_html=True)
+_bug_hero = _cms.get("bug_report_hero", {})
+st.markdown(
+    hero_html(
+        _bug_hero.get("title", "").strip() or "🐛 Bug Report",
+        _bug_hero.get("subtitle", "").strip() or "Help us improve by reporting issues you encounter",
+    ),
+    unsafe_allow_html=True,
+)
 
 
 if st.session_state.bug_submitted:

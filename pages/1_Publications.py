@@ -15,7 +15,7 @@ from utils.security import (
     sanitize_string, validate_orcid, log_audit, log_error, RateLimiter,
     can_sync_publications, is_admin
 )
-from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers
+from utils.hf_data import sync_from_openalex as hf_sync, get_active_researchers, load_cms_content
 from utils.export import export_to_csv, export_to_bibtex
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
@@ -26,6 +26,7 @@ apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 
 # Initialize rate limiter
 rate_limiter = RateLimiter()
@@ -76,7 +77,14 @@ if "current_page" not in st.session_state:
 # PAGE
 # ============================================
 
-st.markdown(hero_html("📚 Publications", "Browse, search, and export your research portfolio"), unsafe_allow_html=True)
+_pub_hero = _cms.get("publications_hero", {})
+st.markdown(
+    hero_html(
+        _pub_hero.get("title", "").strip() or "📚 Publications",
+        _pub_hero.get("subtitle", "").strip() or "Browse, search, and export your research portfolio",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Sync Section ────────────────────────────────────────────────────────────
 st.markdown(section_title_html("Sync Publications"), unsafe_allow_html=True)

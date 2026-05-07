@@ -180,9 +180,29 @@ def save_ai_settings(settings: dict) -> tuple[bool, str | None]:
 _CMS_FILE = "cms_content.json"
 
 _CMS_DEFAULTS: dict = {
+    # Global
+    "site_title":   "",
+    "site_tagline": "",
+    # Home (backward-compat keys kept)
     "home_announcement": {"enabled": False, "text": "", "color": "info"},
     "home_hero":         {"title": "", "subtitle": ""},
-    "footer_note":       "",
+    # Per-page heroes
+    "publications_hero":   {"title": "", "subtitle": ""},
+    "ai_assistant_hero":   {"title": "", "subtitle": ""},
+    "analytics_hero":      {"title": "", "subtitle": ""},
+    "bioinformatics_hero": {"title": "", "subtitle": ""},
+    "settings_hero":       {"title": "", "subtitle": ""},
+    "bug_report_hero":     {"title": "", "subtitle": ""},
+    "admin_hero":          {"title": "", "subtitle": ""},
+    # AI Assistant specifics
+    "ai_welcome_message":   "",
+    "ai_input_placeholder": "",
+    "ai_btn_summarize":     "",
+    "ai_btn_findings":      "",
+    "ai_btn_methodology":   "",
+    "ai_btn_implications":  "",
+    # Footer
+    "footer_note": "",
 }
 
 @st.cache_data(ttl=120)

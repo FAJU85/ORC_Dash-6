@@ -37,6 +37,7 @@ apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 
 rate_limiter = RateLimiter()
 
@@ -62,7 +63,14 @@ for key, default in [
 # PAGE
 # ============================================
 
-st.markdown(hero_html("🔐 Administrator Panel", "Secure system management & audit console"), unsafe_allow_html=True)
+_admin_hero = _cms.get("admin_hero", {})
+st.markdown(
+    hero_html(
+        _admin_hero.get("title", "").strip() or "🔐 Administrator Panel",
+        _admin_hero.get("subtitle", "").strip() or "Secure system management & audit console",
+    ),
+    unsafe_allow_html=True,
+)
 
 # Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
 admin_email    = (get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email",    "")).lower().strip()
@@ -778,69 +786,147 @@ if is_admin_authenticated():
                 st.session_state["_ai_settings_override"] = merged
                 st.info(f"ℹ️ {err or 'Saved for this session.'}")
 
-# ── CMS — Content Management ───────────────────────────────────────────────
+# ── CMS — Content Management ──────────────────────────────────────────────────
 if is_admin_authenticated():
     st.markdown(section_title_html("📝 Content Management"), unsafe_allow_html=True)
-    st.caption("Customize text and announcements displayed across the dashboard.")
+    st.caption("Customize text and content displayed across every page of the dashboard.")
 
-    cms = load_cms_content()
+    cms = st.session_state.get("_cms_override") or load_cms_content()
 
-    # ── Home page announcement banner ───────────────────────────────────────
-    with st.expander("📢 Home Page Announcement", expanded=False):
-        ann = cms.get("home_announcement", {})
-        ann_enabled = st.toggle("Show announcement banner", value=bool(ann.get("enabled", False)),
-                                key="cms_ann_enabled")
-        ann_text = st.text_area("Announcement text", value=ann.get("text", ""),
-                                height=80, key="cms_ann_text",
-                                placeholder="e.g. Dashboard maintenance scheduled for Sunday 2am UTC.")
-        ann_color = st.selectbox("Banner style", ["info", "success", "warning"],
-                                 index=["info", "success", "warning"].index(ann.get("color", "info")),
-                                 key="cms_ann_color")
-        if st.button("💾 Save Announcement", key="cms_ann_save", type="primary"):
-            new_cms = {**cms, "home_announcement": {
-                "enabled": ann_enabled, "text": ann_text.strip(), "color": ann_color
-            }}
-            ok, err = save_cms_content(new_cms)
-            if ok:
-                st.success("✅ Announcement saved.")
-                log_audit("cms_announcement_updated", ann_text[:80])
-            else:
-                st.session_state["_cms_override"] = new_cms
-                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+    def _cms_save(new_cms: dict, label: str) -> None:
+        ok, err = save_cms_content(new_cms)
+        if ok:
+            st.success(f"✅ {label} saved.")
+            log_audit("cms_updated", label)
+        else:
+            st.session_state["_cms_override"] = new_cms
+            st.info(f"ℹ️ {err or 'Saved for this session.'}")
 
-    # ── Home page hero text ─────────────────────────────────────────────────
-    with st.expander("🏠 Home Page Hero Text", expanded=False):
-        hero = cms.get("home_hero", {})
-        hero_title    = st.text_input("Hero title (leave blank for default)",
-                                      value=hero.get("title", ""), key="cms_hero_title")
-        hero_subtitle = st.text_input("Hero subtitle (leave blank for default)",
-                                      value=hero.get("subtitle", ""), key="cms_hero_subtitle")
-        if st.button("💾 Save Hero Text", key="cms_hero_save", type="primary"):
-            new_cms = {**cms, "home_hero": {
-                "title": hero_title.strip(), "subtitle": hero_subtitle.strip()
-            }}
-            ok, err = save_cms_content(new_cms)
-            if ok:
-                st.success("✅ Hero text saved.")
-                log_audit("cms_hero_updated", hero_title[:60])
-            else:
-                st.session_state["_cms_override"] = new_cms
-                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+    cms_tab_global, cms_tab_home, cms_tab_pages, cms_tab_ai, cms_tab_footer = st.tabs(
+        ["🌐 Global", "🏠 Home", "📄 Pages", "🤖 AI Assistant", "🔻 Footer"]
+    )
 
-    # ── Footer note ─────────────────────────────────────────────────────────
-    with st.expander("🔻 Footer Note", expanded=False):
-        footer_note = st.text_input("Custom footer note (leave blank for default)",
-                                    value=cms.get("footer_note", ""), key="cms_footer_note",
-                                    placeholder="e.g. For internal use only.")
-        if st.button("💾 Save Footer Note", key="cms_footer_save", type="primary"):
-            new_cms = {**cms, "footer_note": footer_note.strip()}
-            ok, err = save_cms_content(new_cms)
-            if ok:
-                st.success("✅ Footer note saved.")
-                log_audit("cms_footer_updated", footer_note[:60])
-            else:
-                st.session_state["_cms_override"] = new_cms
-                st.info(f"ℹ️ {err or 'Saved for this session.'}")
+    # ── Global ──────────────────────────────────────────────────────────────
+    with cms_tab_global:
+        st.caption("Override the site title and tagline shown in the browser and hero areas.")
+        g_title    = st.text_input("Site title",   value=cms.get("site_title", ""),
+                                   placeholder="ORC Research Dashboard", key="cms_g_title")
+        g_tagline  = st.text_input("Site tagline", value=cms.get("site_tagline", ""),
+                                   placeholder="Academic Analytics & Publication Intelligence Platform",
+                                   key="cms_g_tagline")
+        if st.button("💾 Save Global", key="cms_g_save", type="primary"):
+            _cms_save({**cms, "site_title": g_title.strip(), "site_tagline": g_tagline.strip()},
+                      "Global settings")
+
+    # ── Home ────────────────────────────────────────────────────────────────
+    with cms_tab_home:
+        with st.expander("🦸 Hero Text", expanded=True):
+            h = cms.get("home_hero", {})
+            hh_title = st.text_input("Title",    value=h.get("title", ""),
+                                     placeholder="🔬 ORC Research Dashboard", key="cms_hh_title")
+            hh_sub   = st.text_input("Subtitle", value=h.get("subtitle", ""),
+                                     placeholder="Academic Analytics & Publication Intelligence Platform",
+                                     key="cms_hh_sub")
+            if st.button("💾 Save Hero", key="cms_hh_save", type="primary"):
+                _cms_save({**cms, "home_hero": {"title": hh_title.strip(), "subtitle": hh_sub.strip()}},
+                          "Home hero text")
+
+        with st.expander("📢 Announcement Banner", expanded=False):
+            ann = cms.get("home_announcement", {})
+            ann_on    = st.toggle("Show banner", value=bool(ann.get("enabled", False)), key="cms_ann_on")
+            ann_text  = st.text_area("Message", value=ann.get("text", ""), height=80, key="cms_ann_text",
+                                     placeholder="e.g. Scheduled maintenance Sunday 2am UTC.")
+            ann_color = st.selectbox("Style", ["info", "success", "warning"],
+                                     index=["info","success","warning"].index(ann.get("color","info")),
+                                     key="cms_ann_color")
+            if st.button("💾 Save Banner", key="cms_ann_save", type="primary"):
+                _cms_save({**cms, "home_announcement": {
+                    "enabled": ann_on, "text": ann_text.strip(), "color": ann_color}},
+                    "Home announcement")
+
+    # ── Pages ───────────────────────────────────────────────────────────────
+    with cms_tab_pages:
+        st.caption("Override the hero title and subtitle on each page. Leave blank to use the default.")
+        _PAGE_HEROES = [
+            ("publications_hero",   "📚 Publications",    "📚 Publications",
+             "Browse, search, and export your research portfolio"),
+            ("analytics_hero",      "📊 Analytics",       "📈 Analytics",
+             "Research metrics, publication trends, and collaboration insights"),
+            ("bioinformatics_hero", "🧬 Bioinformatics",  "🧬 Bioinformatics",
+             "Protein structure prediction · Genomic sequence & variant analysis"),
+            ("settings_hero",       "⚙️ Settings",         "⚙️ Settings",
+             "Customize your dashboard preferences and export publications"),
+            ("bug_report_hero",     "🐛 Bug Report",      "🐛 Bug Report",
+             "Help us improve by reporting issues you encounter"),
+            ("admin_hero",          "🔐 Admin",           "🔐 Administrator Panel",
+             "Secure system management & audit console"),
+        ]
+        for key, label, default_title, default_sub in _PAGE_HEROES:
+            with st.expander(label, expanded=False):
+                hero = cms.get(key, {})
+                t = st.text_input("Title",    value=hero.get("title",    ""),
+                                  placeholder=default_title, key=f"cms_{key}_title")
+                s = st.text_input("Subtitle", value=hero.get("subtitle", ""),
+                                  placeholder=default_sub,   key=f"cms_{key}_sub")
+                if st.button(f"💾 Save", key=f"cms_{key}_save", type="primary"):
+                    _cms_save({**cms, key: {"title": t.strip(), "subtitle": s.strip()}}, f"{label} hero")
+
+    # ── AI Assistant ─────────────────────────────────────────────────────────
+    with cms_tab_ai:
+        with st.expander("🦸 Hero Text", expanded=True):
+            ah = cms.get("ai_assistant_hero", {})
+            ah_t = st.text_input("Title",    value=ah.get("title",    ""),
+                                 placeholder="🔬 AI Research Assistant", key="cms_ah_title")
+            ah_s = st.text_input("Subtitle", value=ah.get("subtitle", ""),
+                                 placeholder="Structured analysis and Q&A — results remembered within your session",
+                                 key="cms_ah_sub")
+            if st.button("💾 Save AI Hero", key="cms_ah_save", type="primary"):
+                _cms_save({**cms, "ai_assistant_hero": {"title": ah_t.strip(), "subtitle": ah_s.strip()}},
+                          "AI assistant hero")
+
+        with st.expander("💬 Chat Interface", expanded=False):
+            ai_welcome = st.text_area("Welcome message (shown when chat is empty)",
+                                      value=cms.get("ai_welcome_message", ""), height=80,
+                                      placeholder="Ask me anything about your research publications…",
+                                      key="cms_ai_welcome")
+            ai_placeholder = st.text_input("Chat input placeholder",
+                                           value=cms.get("ai_input_placeholder", ""),
+                                           placeholder="Ask about your research papers…",
+                                           key="cms_ai_placeholder")
+            if st.button("💾 Save Chat Text", key="cms_ai_chat_save", type="primary"):
+                _cms_save({**cms, "ai_welcome_message": ai_welcome.strip(),
+                           "ai_input_placeholder": ai_placeholder.strip()}, "AI chat interface text")
+
+        with st.expander("⚡ Quick Action Labels", expanded=False):
+            st.caption("Override the labels on the four quick-action buttons.")
+            c1, c2 = st.columns(2)
+            with c1:
+                b_sum  = st.text_input("Summarize",   value=cms.get("ai_btn_summarize",   ""),
+                                       placeholder="📝 Summarize",   key="cms_ai_b1")
+                b_find = st.text_input("Key Findings", value=cms.get("ai_btn_findings",    ""),
+                                       placeholder="🔍 Key Findings", key="cms_ai_b2")
+            with c2:
+                b_meth = st.text_input("Methodology",  value=cms.get("ai_btn_methodology", ""),
+                                       placeholder="📊 Methodology",  key="cms_ai_b3")
+                b_impl = st.text_input("Implications",  value=cms.get("ai_btn_implications",""),
+                                       placeholder="🔗 Implications",  key="cms_ai_b4")
+            if st.button("💾 Save Button Labels", key="cms_ai_btn_save", type="primary"):
+                _cms_save({**cms,
+                           "ai_btn_summarize":     b_sum.strip(),
+                           "ai_btn_findings":      b_find.strip(),
+                           "ai_btn_methodology":   b_meth.strip(),
+                           "ai_btn_implications":  b_impl.strip()}, "AI quick action labels")
+
+    # ── Footer ───────────────────────────────────────────────────────────────
+    with cms_tab_footer:
+        fn = st.text_input("Footer note (shown on every page below the built-by line)",
+                           value=cms.get("footer_note", ""), key="cms_fn",
+                           placeholder="For internal use only · v2.0")
+        if st.button("💾 Save Footer", key="cms_fn_save", type="primary"):
+            _cms_save({**cms, "footer_note": fn.strip()}, "Footer note")
+        if cms.get("footer_note") and st.button("🗑️ Clear Footer Note", key="cms_fn_clear"):
+            _cms_save({**cms, "footer_note": ""}, "Footer note cleared")
+            st.rerun()
 
 # ── Footer ─────────────────────────────────────────────────────────────────
 st.divider()

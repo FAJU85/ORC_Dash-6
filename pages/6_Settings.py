@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.security import get_secret, get_nested_secret, execute_query, is_db_configured
-from utils.hf_data import load_publications, get_active_researchers
+from utils.hf_data import load_publications, get_active_researchers, load_cms_content
 from utils.export import export_to_csv, export_to_bibtex, format_citation
 from utils.styles import apply_styles, get_theme, hero_html, section_title_html, footer_html, render_navbar, render_font_zoom_controls, DARK, LIGHT
 from utils.ui import check_openalex_status
@@ -18,6 +18,7 @@ apply_styles()
 render_navbar()
 
 colors = DARK if get_theme() == "dark" else LIGHT
+_cms = st.session_state.get("_cms_override") or load_cms_content()
 
 # ============================================
 # SESSION STATE
@@ -37,7 +38,14 @@ if "confirm_reset_settings" not in st.session_state:
 # PAGE
 # ============================================
 
-st.markdown(hero_html("⚙️ Settings", "Customize your dashboard preferences and export publications"), unsafe_allow_html=True)
+_settings_hero = _cms.get("settings_hero", {})
+st.markdown(
+    hero_html(
+        _settings_hero.get("title", "").strip() or "⚙️ Settings",
+        _settings_hero.get("subtitle", "").strip() or "Customize your dashboard preferences and export publications",
+    ),
+    unsafe_allow_html=True,
+)
 
 # Load a small sample for the inline citation preview (cheap, cached by Streamlit)
 from utils.security import execute_query as _eq

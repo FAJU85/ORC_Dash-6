@@ -528,6 +528,48 @@ hr                                      {{ border-color: {border} !important; op
     color: {accent} !important;
     font-weight: 600 !important;
 }}
+
+/* ── Chat bubbles ── */
+[data-testid="stChatMessage"] {{
+    background: transparent !important;
+    border: none !important;
+    padding: 0.25rem 0 !important;
+}}
+[data-testid="stChatMessage"][data-testid*="user"] .stMarkdown,
+[data-testid="stChatMessageContent"] {{
+    background: transparent;
+}}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) .stMarkdown p,
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) .stMarkdown {{
+    background: {accent} !important;
+    color: #FCFCFB !important;
+    border-radius: 18px 18px 4px 18px;
+    padding: 0.65rem 1rem !important;
+    margin-left: auto;
+    max-width: 82%;
+    word-break: break-word;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) .stMarkdown {{
+    background: {surface2} !important;
+    color: {text} !important;
+    border-radius: 18px 18px 18px 4px;
+    padding: 0.65rem 1rem !important;
+    max-width: 88%;
+    word-break: break-word;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}}
+[data-testid="stChatInput"] {{
+    border-radius: 24px !important;
+    border: 1.5px solid {border} !important;
+    background: {surface} !important;
+}}
+[data-testid="stChatInput"] textarea {{
+    background: transparent !important;
+    color: {text} !important;
+    font-family: 'Zain', sans-serif !important;
+    font-size: calc(0.95rem * var(--orc-zoom)) !important;
+}}
 </style>
 """
 
@@ -655,6 +697,48 @@ hr                                      {{ border-color: {border} !important; op
     background: {surface2} !important;
     color: {accent} !important;
     font-weight: 600 !important;
+}}
+
+/* ── Chat bubbles ── */
+[data-testid="stChatMessage"] {{
+    background: transparent !important;
+    border: none !important;
+    padding: 0.25rem 0 !important;
+}}
+[data-testid="stChatMessage"][data-testid*="user"] .stMarkdown,
+[data-testid="stChatMessageContent"] {{
+    background: transparent;
+}}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) .stMarkdown p,
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) .stMarkdown {{
+    background: {accent} !important;
+    color: #1a1a2e !important;
+    border-radius: 18px 18px 4px 18px;
+    padding: 0.65rem 1rem !important;
+    margin-left: auto;
+    max-width: 82%;
+    word-break: break-word;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}}
+div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) .stMarkdown {{
+    background: {surface2} !important;
+    color: {text} !important;
+    border-radius: 18px 18px 18px 4px;
+    padding: 0.65rem 1rem !important;
+    max-width: 88%;
+    word-break: break-word;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}}
+[data-testid="stChatInput"] {{
+    border-radius: 24px !important;
+    border: 1.5px solid {border} !important;
+    background: {surface} !important;
+}}
+[data-testid="stChatInput"] textarea {{
+    background: transparent !important;
+    color: {text} !important;
+    font-family: 'Zain', sans-serif !important;
+    font-size: calc(0.95rem * var(--orc-zoom)) !important;
 }}
 </style>
 """

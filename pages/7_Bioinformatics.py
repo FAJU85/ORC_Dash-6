@@ -169,7 +169,10 @@ def _genome_post(endpoint: str, body: dict) -> tuple[dict | None, str | None]:
                 "verify **ALPHA_GENOME_BASE_URL** in your secrets or contact your API provider."
             )
         if resp.status_code == 400:
-            detail = resp.json().get("error", {}).get("message", resp.text[:200])
+            try:
+                detail = resp.json().get("error", {}).get("message", resp.text[:200])
+            except (ValueError, KeyError):
+                detail = resp.text[:200]
             return None, f"Bad request: {detail}"
         resp.raise_for_status()
         return resp.json(), None

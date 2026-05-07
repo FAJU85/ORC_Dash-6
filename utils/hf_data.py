@@ -41,12 +41,20 @@ _write_lock = threading.Lock()
 # ============================================
 
 def get_repo_id() -> str | None:
-    """Get the Hugging Face repo ID for data storage"""
-    return os.environ.get("HF_REPO_ID") or None
+    """Get the Hugging Face repo ID from secrets, falling back to env var."""
+    try:
+        from utils.security import get_secret as _gs
+        return _gs("HF_REPO_ID") or os.environ.get("HF_REPO_ID") or None
+    except Exception:
+        return os.environ.get("HF_REPO_ID") or None
 
 def get_hf_token() -> str | None:
-    """Get Hugging Face token from environment"""
-    return os.environ.get("HF_TOKEN") or None
+    """Get the Hugging Face token from secrets, falling back to env var."""
+    try:
+        from utils.security import get_secret as _gs
+        return _gs("HF_TOKEN") or os.environ.get("HF_TOKEN") or None
+    except Exception:
+        return os.environ.get("HF_TOKEN") or None
 
 def is_hf_configured() -> bool:
     """Check if Hugging Face is properly configured"""
@@ -186,7 +194,19 @@ def load_cms_content() -> dict:
     if err or not isinstance(data, dict):
         return dict(_CMS_DEFAULTS)
     merged = dict(_CMS_DEFAULTS)
-    merged.update(data)
+    for key, default_val in _CMS_DEFAULTS.items():
+        incoming = data.get(key)
+        if incoming is None:
+            continue
+        if not isinstance(incoming, type(default_val)):
+            continue  # wrong type — keep default
+        if isinstance(default_val, dict):
+            # Validate sub-keys too: accept only if it's a proper dict
+            if isinstance(incoming, dict):
+                merged[key] = {**default_val, **{k: v for k, v in incoming.items()
+                                                  if k in default_val}}
+        else:
+            merged[key] = incoming
     return merged
 
 

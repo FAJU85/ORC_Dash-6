@@ -4,6 +4,7 @@ Enterprise-grade, minimalist UI with full dark/light theme support.
 Call apply_styles() at the top of every page (after set_page_config).
 """
 
+import html as _html
 import streamlit as st
 
 # ── Colour palette ────────────────────────────────────────────────────────────
@@ -889,7 +890,7 @@ def footer_html(extra: str = "") -> str:
             from utils.hf_data import load_cms_content as _lcms
             _note = _lcms().get("footer_note", "").strip()
         if _note:
-            cms_note = f"<p style='margin:0.1rem 0 0'>{_note}</p>"
+            cms_note = f"<p style='margin:0.1rem 0 0'>{_html.escape(_note)}</p>"
     except Exception:
         pass
     return (

@@ -4,6 +4,7 @@ Two-factor authentication with rate limiting and audit logging.
 """
 
 import hmac
+import uuid
 import streamlit as st
 import sys
 import os
@@ -428,6 +429,32 @@ else:
                     if st.button("Cancel", key="admin_confirm_remove_researcher_no", use_container_width=True):
                         st.session_state.admin_orcid_to_delete_confirm = None
                         st.rerun()
+
+            # Sync all researchers
+            st.markdown("---")
+            st.markdown("**Sync All Researchers**")
+            if st.button("🔄 Sync All from OpenAlex", key="sync_all_researchers", type="primary"):
+                results = []
+                progress = st.progress(0)
+                status_area = st.empty()
+                for i, r in enumerate(researchers):
+                    orcid = r.get("orcid", "")
+                    name = r.get("name", orcid)
+                    if not orcid:
+                        continue
+                    status_area.info(f"Syncing {name}…")
+                    count, err = sync_from_openalex(orcid)
+                    if err:
+                        results.append(f"❌ {name}: {err}")
+                    else:
+                        results.append(f"✅ {name}: {count} new publication(s)")
+                    progress.progress((i + 1) / len(researchers))
+                status_area.empty()
+                progress.empty()
+                for r in results:
+                    st.write(r)
+                log_audit("sync_all_researchers")
+                st.success("Sync complete.")
         else:
             st.info("No researchers added yet.")
 
@@ -822,27 +849,129 @@ if is_admin_authenticated():
     with cms_tab_home:
         with st.expander("🦸 Hero Text", expanded=True):
             h = cms.get("home_hero", {})
-            hh_title = st.text_input("Title",    value=h.get("title", ""),
-                                     placeholder="🔬 ORC Research Dashboard", key="cms_hh_title")
-            hh_sub   = st.text_input("Subtitle", value=h.get("subtitle", ""),
-                                     placeholder="Academic Analytics & Publication Intelligence Platform",
-                                     key="cms_hh_sub")
+            hh_title   = st.text_input("Title",    value=h.get("title", ""),
+                                       placeholder="🔬 ORC Research Dashboard", key="cms_hh_title")
+            hh_sub     = st.text_input("Subtitle", value=h.get("subtitle", ""),
+                                       placeholder="Academic Analytics & Publication Intelligence Platform",
+                                       key="cms_hh_sub")
+            hh_enabled = st.toggle("Show hero", value=bool(h.get("enabled", False)), key="cms_hh_enabled")
             if st.button("💾 Save Hero", key="cms_hh_save", type="primary"):
-                _cms_save({**cms, "home_hero": {"title": hh_title.strip(), "subtitle": hh_sub.strip()}},
-                          "Home hero text")
+                _cms_save({**cms, "home_hero": {
+                    "title": hh_title.strip(), "subtitle": hh_sub.strip(), "enabled": hh_enabled}},
+                    "Home hero text")
 
-        with st.expander("📢 Announcement Banner", expanded=False):
-            ann = cms.get("home_announcement", {})
-            ann_on    = st.toggle("Show banner", value=bool(ann.get("enabled", False)), key="cms_ann_on")
-            ann_text  = st.text_area("Message", value=ann.get("text", ""), height=80, key="cms_ann_text",
-                                     placeholder="e.g. Scheduled maintenance Sunday 2am UTC.")
-            ann_color = st.selectbox("Style", ["info", "success", "warning"],
-                                     index=["info","success","warning"].index(ann.get("color","info")),
-                                     key="cms_ann_color")
-            if st.button("💾 Save Banner", key="cms_ann_save", type="primary"):
-                _cms_save({**cms, "home_announcement": {
-                    "enabled": ann_on, "text": ann_text.strip(), "color": ann_color}},
-                    "Home announcement")
+        with st.expander("📢 Announcements", expanded=True):
+            st.caption("Add, edit, enable/disable, or delete announcement banners shown on the Home page.")
+
+            _announcements = list(cms.get("announcements", []))
+
+            # ── Existing announcements ────────────────────────────────────
+            for _i, _ann in enumerate(_announcements):
+                _ann_id = _ann.get("id", str(_i))
+                _edit_key = f"_cms_edit_ann_{_ann_id}"
+                _del_key  = f"_cms_del_ann_{_ann_id}"
+                if _edit_key not in st.session_state:
+                    st.session_state[_edit_key] = False
+                if _del_key not in st.session_state:
+                    st.session_state[_del_key] = False
+
+                _color_badge = {"info": "🔵", "success": "🟢", "warning": "🟡"}.get(_ann.get("color", "info"), "🔵")
+                _enabled_icon = "✅" if _ann.get("enabled") else "⏸️"
+                _preview = (_ann.get("text", "") or "")[:60] + ("…" if len(_ann.get("text", "")) > 60 else "")
+
+                # Card header row
+                _hcols = st.columns([0.05, 0.55, 0.12, 0.12, 0.08, 0.08])
+                _hcols[0].write(_color_badge)
+                _hcols[1].caption(_preview or "_empty_")
+                _hcols[2].write(_enabled_icon)
+                if _hcols[3].button("✏️ Edit", key=f"cms_ann_edit_{_ann_id}"):
+                    st.session_state[_edit_key] = not st.session_state[_edit_key]
+                    st.session_state[_del_key] = False
+                if _hcols[4].button("🗑️", key=f"cms_ann_del_{_ann_id}"):
+                    st.session_state[_del_key] = not st.session_state[_del_key]
+                    st.session_state[_edit_key] = False
+
+                # Delete confirmation
+                if st.session_state[_del_key]:
+                    st.warning(f"Delete this announcement? \"{_preview}\"")
+                    _dc1, _dc2 = st.columns(2)
+                    if _dc1.button("Yes, delete", key=f"cms_ann_del_confirm_{_ann_id}", type="primary"):
+                        try:
+                            _new_anns = [a for a in _announcements if a.get("id") != _ann_id]
+                            _cms_save({**cms, "announcements": _new_anns}, "Announcement deleted")
+                            st.session_state[_del_key] = False
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Error: {_e}")
+                    if _dc2.button("Cancel", key=f"cms_ann_del_cancel_{_ann_id}"):
+                        st.session_state[_del_key] = False
+                        st.rerun()
+
+                # Edit form
+                if st.session_state[_edit_key]:
+                    with st.container():
+                        _et = st.text_area("Message", value=_ann.get("text", ""), height=80,
+                                           key=f"cms_ann_etext_{_ann_id}")
+                        _ec1, _ec2 = st.columns(2)
+                        _clr_opts = ["info", "success", "warning"]
+                        _cur_clr = _ann.get("color", "info")
+                        _ec = _ec1.selectbox("Style", _clr_opts,
+                                             index=_clr_opts.index(_cur_clr) if _cur_clr in _clr_opts else 0,
+                                             key=f"cms_ann_eclr_{_ann_id}")
+                        _eon = _ec2.toggle("Enabled", value=bool(_ann.get("enabled", True)),
+                                           key=f"cms_ann_een_{_ann_id}")
+                        _sb1, _sb2 = st.columns(2)
+                        if _sb1.button("💾 Save", key=f"cms_ann_esave_{_ann_id}", type="primary"):
+                            try:
+                                _new_anns = []
+                                for _a in _announcements:
+                                    if _a.get("id") == _ann_id:
+                                        _new_anns.append({**_a, "text": _et.strip(), "color": _ec, "enabled": _eon})
+                                    else:
+                                        _new_anns.append(_a)
+                                _cms_save({**cms, "announcements": _new_anns}, "Announcement updated")
+                                st.session_state[_edit_key] = False
+                                st.rerun()
+                            except Exception as _e:
+                                st.error(f"Error: {_e}")
+                        if _sb2.button("Cancel", key=f"cms_ann_ecancel_{_ann_id}"):
+                            st.session_state[_edit_key] = False
+                            st.rerun()
+                st.divider()
+
+            # ── Add new announcement ──────────────────────────────────────
+            if "cms_add_ann_open" not in st.session_state:
+                st.session_state["cms_add_ann_open"] = False
+
+            if st.button("➕ Add New Announcement", key="cms_ann_add_btn"):
+                st.session_state["cms_add_ann_open"] = not st.session_state["cms_add_ann_open"]
+
+            if st.session_state["cms_add_ann_open"]:
+                with st.container():
+                    st.markdown("**New Announcement**")
+                    _new_text  = st.text_area("Message", height=80, key="cms_ann_new_text",
+                                              placeholder="e.g. Scheduled maintenance Sunday 2am UTC.")
+                    _n1, _n2 = st.columns(2)
+                    _new_color = _n1.selectbox("Style", ["info", "success", "warning"], key="cms_ann_new_color")
+                    _new_en    = _n2.toggle("Enabled", value=True, key="cms_ann_new_en")
+                    _nb1, _nb2 = st.columns(2)
+                    if _nb1.button("💾 Add", key="cms_ann_new_save", type="primary"):
+                        try:
+                            _new_item = {
+                                "id":      uuid.uuid4().hex[:8],
+                                "text":    _new_text.strip(),
+                                "color":   _new_color,
+                                "enabled": _new_en,
+                            }
+                            _cms_save({**cms, "announcements": _announcements + [_new_item]},
+                                      "Announcement added")
+                            st.session_state["cms_add_ann_open"] = False
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Error: {_e}")
+                    if _nb2.button("Cancel", key="cms_ann_new_cancel"):
+                        st.session_state["cms_add_ann_open"] = False
+                        st.rerun()
 
     # ── Pages ───────────────────────────────────────────────────────────────
     with cms_tab_pages:
@@ -861,71 +990,174 @@ if is_admin_authenticated():
             ("admin_hero",          "🔐 Admin",           "🔐 Administrator Panel",
              "Secure system management & audit console"),
         ]
-        for key, label, default_title, default_sub in _PAGE_HEROES:
-            with st.expander(label, expanded=False):
-                hero = cms.get(key, {})
-                t = st.text_input("Title",    value=hero.get("title",    ""),
-                                  placeholder=default_title, key=f"cms_{key}_title")
-                s = st.text_input("Subtitle", value=hero.get("subtitle", ""),
-                                  placeholder=default_sub,   key=f"cms_{key}_sub")
-                if st.button(f"💾 Save", key=f"cms_{key}_save", type="primary"):
-                    _cms_save({**cms, key: {"title": t.strip(), "subtitle": s.strip()}}, f"{label} hero")
+        for _phkey, _phlabel, _phdef_title, _phdef_sub in _PAGE_HEROES:
+            with st.expander(_phlabel, expanded=False):
+                _phero = cms.get(_phkey, {})
+                _pht = st.text_input("Title",    value=_phero.get("title",    ""),
+                                     placeholder=_phdef_title, key=f"cms_{_phkey}_title")
+                _phs = st.text_input("Subtitle", value=_phero.get("subtitle", ""),
+                                     placeholder=_phdef_sub,   key=f"cms_{_phkey}_sub")
+                _phen = st.toggle("Show hero", value=bool(_phero.get("enabled", False)),
+                                  key=f"cms_{_phkey}_enabled")
+                if st.button("💾 Save", key=f"cms_{_phkey}_save", type="primary"):
+                    _cms_save({**cms, _phkey: {
+                        "title": _pht.strip(), "subtitle": _phs.strip(), "enabled": _phen}},
+                        f"{_phlabel} hero")
 
     # ── AI Assistant ─────────────────────────────────────────────────────────
     with cms_tab_ai:
         with st.expander("🦸 Hero Text", expanded=True):
             ah = cms.get("ai_assistant_hero", {})
-            ah_t = st.text_input("Title",    value=ah.get("title",    ""),
-                                 placeholder="🔬 AI Research Assistant", key="cms_ah_title")
-            ah_s = st.text_input("Subtitle", value=ah.get("subtitle", ""),
-                                 placeholder="Structured analysis and Q&A — results remembered within your session",
-                                 key="cms_ah_sub")
+            ah_t   = st.text_input("Title",    value=ah.get("title",    ""),
+                                   placeholder="🔬 AI Research Assistant", key="cms_ah_title")
+            ah_s   = st.text_input("Subtitle", value=ah.get("subtitle", ""),
+                                   placeholder="Structured analysis and Q&A — results remembered within your session",
+                                   key="cms_ah_sub")
+            ah_en  = st.toggle("Show hero", value=bool(ah.get("enabled", False)), key="cms_ah_enabled")
             if st.button("💾 Save AI Hero", key="cms_ah_save", type="primary"):
-                _cms_save({**cms, "ai_assistant_hero": {"title": ah_t.strip(), "subtitle": ah_s.strip()}},
-                          "AI assistant hero")
+                _cms_save({**cms, "ai_assistant_hero": {
+                    "title": ah_t.strip(), "subtitle": ah_s.strip(), "enabled": ah_en}},
+                    "AI assistant hero")
 
         with st.expander("💬 Chat Interface", expanded=False):
-            ai_welcome = st.text_area("Welcome message (shown when chat is empty)",
-                                      value=cms.get("ai_welcome_message", ""), height=80,
-                                      placeholder="Ask me anything about your research publications…",
-                                      key="cms_ai_welcome")
+            _ai_wel_en    = st.toggle("Show welcome message", value=bool(cms.get("ai_welcome_enabled", True)),
+                                      key="cms_ai_wel_en")
+            ai_welcome    = st.text_area("Welcome message (shown when chat is empty)",
+                                         value=cms.get("ai_welcome_message", ""), height=80,
+                                         placeholder="Ask me anything about your research publications…",
+                                         key="cms_ai_welcome")
             ai_placeholder = st.text_input("Chat input placeholder",
                                            value=cms.get("ai_input_placeholder", ""),
                                            placeholder="Ask about your research papers…",
                                            key="cms_ai_placeholder")
             if st.button("💾 Save Chat Text", key="cms_ai_chat_save", type="primary"):
-                _cms_save({**cms, "ai_welcome_message": ai_welcome.strip(),
-                           "ai_input_placeholder": ai_placeholder.strip()}, "AI chat interface text")
-
-        with st.expander("⚡ Quick Action Labels", expanded=False):
-            st.caption("Override the labels on the four quick-action buttons.")
-            c1, c2 = st.columns(2)
-            with c1:
-                b_sum  = st.text_input("Summarize",   value=cms.get("ai_btn_summarize",   ""),
-                                       placeholder="📝 Summarize",   key="cms_ai_b1")
-                b_find = st.text_input("Key Findings", value=cms.get("ai_btn_findings",    ""),
-                                       placeholder="🔍 Key Findings", key="cms_ai_b2")
-            with c2:
-                b_meth = st.text_input("Methodology",  value=cms.get("ai_btn_methodology", ""),
-                                       placeholder="📊 Methodology",  key="cms_ai_b3")
-                b_impl = st.text_input("Implications",  value=cms.get("ai_btn_implications",""),
-                                       placeholder="🔗 Implications",  key="cms_ai_b4")
-            if st.button("💾 Save Button Labels", key="cms_ai_btn_save", type="primary"):
                 _cms_save({**cms,
-                           "ai_btn_summarize":     b_sum.strip(),
-                           "ai_btn_findings":      b_find.strip(),
-                           "ai_btn_methodology":   b_meth.strip(),
-                           "ai_btn_implications":  b_impl.strip()}, "AI quick action labels")
+                           "ai_welcome_message":   ai_welcome.strip(),
+                           "ai_welcome_enabled":   _ai_wel_en,
+                           "ai_input_placeholder": ai_placeholder.strip()},
+                          "AI chat interface text")
+
+        with st.expander("⚡ Quick Action Buttons", expanded=False):
+            st.caption("Add, edit, enable/disable, or delete AI quick-action buttons.")
+
+            _quick_btns = list(cms.get("ai_quick_buttons", []))
+
+            # ── Existing buttons ──────────────────────────────────────────
+            for _qi, _qb in enumerate(_quick_btns):
+                _qid      = _qb.get("id", str(_qi))
+                _qedit_k  = f"_cms_edit_qb_{_qid}"
+                _qdel_k   = f"_cms_del_qb_{_qid}"
+                if _qedit_k not in st.session_state:
+                    st.session_state[_qedit_k] = False
+                if _qdel_k not in st.session_state:
+                    st.session_state[_qdel_k] = False
+
+                _qen_icon = "✅" if _qb.get("enabled", True) else "⏸️"
+                _qlbl_pre = (_qb.get("label", "") or "")[:40]
+                _qpmt_pre = (_qb.get("prompt", "") or "")[:40]
+
+                _qcols = st.columns([0.30, 0.35, 0.10, 0.12, 0.07, 0.06])
+                _qcols[0].caption(f"**{_qlbl_pre}**")
+                _qcols[1].caption(_qpmt_pre)
+                _qcols[2].write(_qen_icon)
+                if _qcols[3].button("✏️ Edit", key=f"cms_qb_edit_{_qid}"):
+                    st.session_state[_qedit_k] = not st.session_state[_qedit_k]
+                    st.session_state[_qdel_k] = False
+                if _qcols[4].button("🗑️", key=f"cms_qb_del_{_qid}"):
+                    st.session_state[_qdel_k] = not st.session_state[_qdel_k]
+                    st.session_state[_qedit_k] = False
+
+                # Delete confirmation
+                if st.session_state[_qdel_k]:
+                    st.warning(f"Delete button \"{_qlbl_pre}\"?")
+                    _qdc1, _qdc2 = st.columns(2)
+                    if _qdc1.button("Yes, delete", key=f"cms_qb_del_confirm_{_qid}", type="primary"):
+                        try:
+                            _new_qbs = [b for b in _quick_btns if b.get("id") != _qid]
+                            _cms_save({**cms, "ai_quick_buttons": _new_qbs}, "Quick button deleted")
+                            st.session_state[_qdel_k] = False
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Error: {_e}")
+                    if _qdc2.button("Cancel", key=f"cms_qb_del_cancel_{_qid}"):
+                        st.session_state[_qdel_k] = False
+                        st.rerun()
+
+                # Edit form
+                if st.session_state[_qedit_k]:
+                    with st.container():
+                        _qel  = st.text_input("Label", value=_qb.get("label", ""), key=f"cms_qb_elabel_{_qid}",
+                                              placeholder="📝 Summarize")
+                        _qep  = st.text_area("Prompt / action", value=_qb.get("prompt", ""), height=60,
+                                             key=f"cms_qb_eprompt_{_qid}",
+                                             placeholder="summarize  OR  Explain this paper in simple terms")
+                        _qeen = st.toggle("Enabled", value=bool(_qb.get("enabled", True)),
+                                          key=f"cms_qb_een_{_qid}")
+                        _qes1, _qes2 = st.columns(2)
+                        if _qes1.button("💾 Save", key=f"cms_qb_esave_{_qid}", type="primary"):
+                            try:
+                                _new_qbs = []
+                                for _b in _quick_btns:
+                                    if _b.get("id") == _qid:
+                                        _new_qbs.append({**_b, "label": _qel.strip(),
+                                                         "prompt": _qep.strip(), "enabled": _qeen})
+                                    else:
+                                        _new_qbs.append(_b)
+                                _cms_save({**cms, "ai_quick_buttons": _new_qbs}, "Quick button updated")
+                                st.session_state[_qedit_k] = False
+                                st.rerun()
+                            except Exception as _e:
+                                st.error(f"Error: {_e}")
+                        if _qes2.button("Cancel", key=f"cms_qb_ecancel_{_qid}"):
+                            st.session_state[_qedit_k] = False
+                            st.rerun()
+                st.divider()
+
+            # ── Add new quick button ──────────────────────────────────────
+            if "cms_add_qb_open" not in st.session_state:
+                st.session_state["cms_add_qb_open"] = False
+
+            if st.button("➕ Add New Button", key="cms_qb_add_btn"):
+                st.session_state["cms_add_qb_open"] = not st.session_state["cms_add_qb_open"]
+
+            if st.session_state["cms_add_qb_open"]:
+                with st.container():
+                    st.markdown("**New Quick Action Button**")
+                    _qnl  = st.text_input("Label", key="cms_qb_new_label",
+                                          placeholder="📝 Summarize")
+                    _qnp  = st.text_area("Prompt / action", height=60, key="cms_qb_new_prompt",
+                                         placeholder="summarize  OR  Explain this paper in simple terms")
+                    _qnen = st.toggle("Enabled", value=True, key="cms_qb_new_en")
+                    _qnb1, _qnb2 = st.columns(2)
+                    if _qnb1.button("💾 Add", key="cms_qb_new_save", type="primary"):
+                        try:
+                            _new_qitem = {
+                                "id":      uuid.uuid4().hex[:8],
+                                "label":   _qnl.strip(),
+                                "prompt":  _qnp.strip(),
+                                "enabled": _qnen,
+                            }
+                            _cms_save({**cms, "ai_quick_buttons": _quick_btns + [_new_qitem]},
+                                      "Quick button added")
+                            st.session_state["cms_add_qb_open"] = False
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Error: {_e}")
+                    if _qnb2.button("Cancel", key="cms_qb_new_cancel"):
+                        st.session_state["cms_add_qb_open"] = False
+                        st.rerun()
 
     # ── Footer ───────────────────────────────────────────────────────────────
     with cms_tab_footer:
-        fn = st.text_input("Footer note (shown on every page below the built-by line)",
-                           value=cms.get("footer_note", ""), key="cms_fn",
-                           placeholder="For internal use only · v2.0")
+        _fn_en = st.toggle("Show footer note", value=bool(cms.get("footer_note_enabled", True)),
+                           key="cms_fn_enabled")
+        fn = st.text_area("Footer note (shown on every page below the built-by line)",
+                          value=cms.get("footer_note", ""), height=80, key="cms_fn",
+                          placeholder="For internal use only · v2.0")
         if st.button("💾 Save Footer", key="cms_fn_save", type="primary"):
-            _cms_save({**cms, "footer_note": fn.strip()}, "Footer note")
+            _cms_save({**cms, "footer_note": fn.strip(), "footer_note_enabled": _fn_en}, "Footer note")
         if cms.get("footer_note") and st.button("🗑️ Clear Footer Note", key="cms_fn_clear"):
-            _cms_save({**cms, "footer_note": ""}, "Footer note cleared")
+            _cms_save({**cms, "footer_note": "", "footer_note_enabled": False}, "Footer note cleared")
             st.rerun()
 
 # ── Footer ─────────────────────────────────────────────────────────────────

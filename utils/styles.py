@@ -92,8 +92,8 @@ def chart_layout(title: str = "", height: int = 0) -> dict:
     """
     c = DARK if get_theme() == "dark" else LIGHT
     base = {
-        "plot_bgcolor":  "rgba(0,0,0,0)",
-        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor":  c["surface"],
+        "paper_bgcolor": c["surface"],
         "font":   {"color": c["text"], "family": "'Exo 2', system-ui, sans-serif", "size": 13},
         "xaxis":  {
             "gridcolor": c["border"], "linecolor": c["border"],

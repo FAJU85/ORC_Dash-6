@@ -664,16 +664,37 @@ if paper:
             unsafe_allow_html=True,
         )
 
-qa1, qa2, qa3, qa4 = st.columns(4)
-for col, label, action in [
-    (qa1, _cms.get("ai_btn_summarize",   "").strip() or "📝 Summarize",    "summarize"),
-    (qa2, _cms.get("ai_btn_findings",    "").strip() or "🔍 Key Findings", "findings"),
-    (qa3, _cms.get("ai_btn_methodology", "").strip() or "📊 Methodology",  "methodology"),
-    (qa4, _cms.get("ai_btn_implications","").strip() or "🔗 Implications", "implications"),
-]:
-    with col:
-        if st.button(label, use_container_width=True, disabled=not paper or not _ai_available):
-            st.session_state.pending_action = action
+# Build quick action button list from CMS (new list format or legacy keys)
+_quick_btns_cms = _cms.get("ai_quick_buttons", [])
+_enabled_quick_btns = [b for b in _quick_btns_cms if b.get("enabled", True)]
+# Fallback to legacy ai_btn_* keys, then hardcoded defaults
+_DEFAULT_QUICK_BTNS = [
+    ("📝 Summarize",    "summarize"),
+    ("🔍 Key Findings", "findings"),
+    ("📊 Methodology",  "methodology"),
+    ("🔗 Implications", "implications"),
+]
+if not _enabled_quick_btns:
+    _legacy_labels = [
+        _cms.get("ai_btn_summarize",   "").strip() or "📝 Summarize",
+        _cms.get("ai_btn_findings",    "").strip() or "🔍 Key Findings",
+        _cms.get("ai_btn_methodology", "").strip() or "📊 Methodology",
+        _cms.get("ai_btn_implications","").strip() or "🔗 Implications",
+    ]
+    _enabled_quick_btns = [
+        {"label": lbl, "prompt": action, "enabled": True}
+        for lbl, action in zip(_legacy_labels, [a for _, a in _DEFAULT_QUICK_BTNS])
+    ]
+
+_btn_cols = st.columns(max(len(_enabled_quick_btns), 1))
+for _col, _btn in zip(_btn_cols, _enabled_quick_btns):
+    _btn_label  = _btn.get("label", "").strip() or "Action"
+    _btn_action = _btn.get("prompt", "").strip()
+    # Map prompt string to known action keys; treat as custom prompt otherwise
+    _action_key = _btn_action if _btn_action in ("summarize", "findings", "methodology", "implications") else _btn_label.lower()
+    with _col:
+        if st.button(_btn_label, use_container_width=True, disabled=not paper or not _ai_available):
+            st.session_state.pending_action = _action_key
 
 if st.session_state.pending_action and paper:
     action = st.session_state.pending_action

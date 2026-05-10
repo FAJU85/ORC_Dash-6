@@ -39,12 +39,18 @@ _hero_title    = _hero.get("title",    "").strip() or "🔬 ORC Research Dashboa
 _hero_subtitle = _hero.get("subtitle", "").strip() or "Academic Analytics & Publication Intelligence Platform"
 st.markdown(hero_html(_hero_title, _hero_subtitle), unsafe_allow_html=True)
 
-# ── Announcement banner ───────────────────────────────────────────────────────
-_ann = _cms.get("home_announcement", {})
-if _ann.get("enabled") and _ann.get("text", "").strip():
-    _ann_color = _ann.get("color", "info")
-    _ann_fn    = {"info": st.info, "success": st.success, "warning": st.warning}.get(_ann_color, st.info)
-    _ann_fn(_ann.get("text", ""))
+# ── Announcement banners ─────────────────────────────────────────────────────
+_announcements = _cms.get("announcements", [])
+# Migration: also check old single announcement
+if not _announcements:
+    _old_ann = _cms.get("home_announcement", {})
+    if _old_ann.get("enabled") and _old_ann.get("text", "").strip():
+        _announcements = [{"text": _old_ann["text"], "color": _old_ann.get("color", "info"), "enabled": True}]
+for _ann in _announcements:
+    if _ann.get("enabled") and _ann.get("text", "").strip():
+        _ann_color = _ann.get("color", "info")
+        _ann_fn = {"info": st.info, "success": st.success, "warning": st.warning}.get(_ann_color, st.info)
+        _ann_fn(_ann.get("text", ""))
 
 # ── Research Metrics ─────────────────────────────────────────────────────────
 st.markdown(section_title_html("Research Metrics"), unsafe_allow_html=True)

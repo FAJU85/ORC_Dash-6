@@ -183,26 +183,31 @@ _CMS_DEFAULTS: dict = {
     # Global
     "site_title":   "",
     "site_tagline": "",
-    # Home (backward-compat keys kept)
-    "home_announcement": {"enabled": False, "text": "", "color": "info"},
-    "home_hero":         {"title": "", "subtitle": ""},
+    # Home
+    "announcements": [],   # List of {"id": str, "text": str, "color": "info|warning|success", "enabled": bool}
+    "home_hero":         {"title": "", "subtitle": "", "enabled": False},
     # Per-page heroes
-    "publications_hero":   {"title": "", "subtitle": ""},
-    "ai_assistant_hero":   {"title": "", "subtitle": ""},
-    "analytics_hero":      {"title": "", "subtitle": ""},
-    "bioinformatics_hero": {"title": "", "subtitle": ""},
-    "settings_hero":       {"title": "", "subtitle": ""},
-    "bug_report_hero":     {"title": "", "subtitle": ""},
-    "admin_hero":          {"title": "", "subtitle": ""},
+    "publications_hero":   {"title": "", "subtitle": "", "enabled": False},
+    "ai_assistant_hero":   {"title": "", "subtitle": "", "enabled": False},
+    "analytics_hero":      {"title": "", "subtitle": "", "enabled": False},
+    "bioinformatics_hero": {"title": "", "subtitle": "", "enabled": False},
+    "settings_hero":       {"title": "", "subtitle": "", "enabled": False},
+    "bug_report_hero":     {"title": "", "subtitle": "", "enabled": False},
+    "admin_hero":          {"title": "", "subtitle": "", "enabled": False},
     # AI Assistant specifics
     "ai_welcome_message":   "",
+    "ai_welcome_enabled":   True,
     "ai_input_placeholder": "",
+    "ai_quick_buttons": [],  # List of {"id": str, "label": str, "prompt": str, "enabled": bool}
+    # Footer
+    "footer_note": "",
+    "footer_note_enabled": True,
+    # Legacy keys kept for migration
+    "home_announcement": {"enabled": False, "text": "", "color": "info"},
     "ai_btn_summarize":     "",
     "ai_btn_findings":      "",
     "ai_btn_methodology":   "",
     "ai_btn_implications":  "",
-    # Footer
-    "footer_note": "",
 }
 
 @st.cache_data(ttl=120)
@@ -218,15 +223,54 @@ def load_cms_content() -> dict:
         incoming = data.get(key)
         if incoming is None:
             continue
+        # Lists are accepted as-is (announcements, ai_quick_buttons)
+        if isinstance(default_val, list):
+            if isinstance(incoming, list):
+                merged[key] = incoming
+            continue
         if not isinstance(incoming, type(default_val)):
             continue  # wrong type — keep default
         if isinstance(default_val, dict):
-            # Validate sub-keys too: accept only if it's a proper dict
+            # Merge sub-keys, but allow extra keys (e.g. "enabled" added later)
             if isinstance(incoming, dict):
-                merged[key] = {**default_val, **{k: v for k, v in incoming.items()
-                                                  if k in default_val}}
+                merged[key] = {**default_val, **incoming}
         else:
             merged[key] = incoming
+
+    # ── Migration: old single home_announcement → announcements list ──────────
+    if not merged.get("announcements"):
+        old_ann = merged.get("home_announcement", {})
+        if old_ann.get("enabled") and old_ann.get("text", "").strip():
+            import uuid as _uuid
+            merged["announcements"] = [{
+                "id":      _uuid.uuid4().hex[:8],
+                "text":    old_ann["text"],
+                "color":   old_ann.get("color", "info"),
+                "enabled": True,
+            }]
+
+    # ── Migration: old ai_btn_* keys → ai_quick_buttons list ─────────────────
+    if not merged.get("ai_quick_buttons"):
+        import uuid as _uuid
+        _old_btns = [
+            ("ai_btn_summarize",    "📝 Summarize",    "Summarize this paper"),
+            ("ai_btn_findings",     "🔍 Key Findings", "What are the key findings?"),
+            ("ai_btn_methodology",  "📊 Methodology",  "Describe the methodology"),
+            ("ai_btn_implications", "🔗 Implications", "What are the implications?"),
+        ]
+        migrated = []
+        for key, default_label, default_prompt in _old_btns:
+            val = merged.get(key, "").strip()
+            if val:
+                migrated.append({
+                    "id":      _uuid.uuid4().hex[:8],
+                    "label":   val,
+                    "prompt":  default_prompt,
+                    "enabled": True,
+                })
+        if migrated:
+            merged["ai_quick_buttons"] = migrated
+
     return merged
 
 

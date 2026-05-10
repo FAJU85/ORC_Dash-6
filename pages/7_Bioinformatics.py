@@ -236,13 +236,14 @@ def _analyse_region(chrom: str, start: int, end: int,
 # ══════════════════════════════════════════════════════════════════════════════
 
 _bio_hero = _cms.get("bioinformatics_hero", {})
-st.markdown(
-    hero_html(
-        _bio_hero.get("title", "").strip() or "🧬 Bioinformatics",
-        _bio_hero.get("subtitle", "").strip() or "Protein structure prediction · Genomic sequence & variant analysis",
-    ),
-    unsafe_allow_html=True,
-)
+if _bio_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _bio_hero.get("title", "").strip() or "🧬 Bioinformatics",
+            _bio_hero.get("subtitle", "").strip() or "Protein structure prediction · Genomic sequence & variant analysis",
+        ),
+        unsafe_allow_html=True,
+    )
 
 tab_protein, tab_genomics = st.tabs(["🔬 Protein Structure", "🧪 Genomic Analysis"])
 
@@ -570,11 +571,11 @@ with tab_genomics:
             f'histone modifications, transcription factor binding, and variant effects — '
             f'without wet-lab experiments.'
             + (
-                f'<br><br>Contact your system administrator to configure API access for live queries.'
+                '<br><br>Contact your system administrator to configure API access for live queries.'
                 if not is_admin_authenticated()
-                else f'<br><br>Configure ALPHA_GENOME_API_KEY (and optionally ALPHA_GENOME_BASE_URL) in your secrets to enable live queries.'
+                else '<br><br>Configure ALPHA_GENOME_API_KEY (and optionally ALPHA_GENOME_BASE_URL) in your secrets to enable live queries.'
             )
-            + f'</div>',
+            + '</div>',
             unsafe_allow_html=True,
         )
 

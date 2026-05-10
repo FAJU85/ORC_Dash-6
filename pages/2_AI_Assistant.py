@@ -560,13 +560,14 @@ for key, val in [
 # ── Page ──────────────────────────────────────────────────────────────────────
 
 _ai_hero = _cms.get("ai_assistant_hero", {})
-st.markdown(
-    hero_html(
-        _ai_hero.get("title", "").strip() or "🔬 AI Research Assistant",
-        _ai_hero.get("subtitle", "").strip() or "Structured analysis and Q&A — results are remembered within your session",
-    ),
-    unsafe_allow_html=True,
-)
+if _ai_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _ai_hero.get("title", "").strip() or "🔬 AI Research Assistant",
+            _ai_hero.get("subtitle", "").strip() or "Structured analysis and Q&A — results are remembered within your session",
+        ),
+        unsafe_allow_html=True,
+    )
 
 api_key = (
     get_secret("AI_API_KEY") or get_secret("GROQ_API_KEY")
@@ -674,7 +675,7 @@ _DEFAULT_QUICK_BTNS = [
     ("📊 Methodology",  "methodology"),
     ("🔗 Implications", "implications"),
 ]
-if not _enabled_quick_btns:
+if "ai_quick_buttons" not in _cms:
     _legacy_labels = [
         _cms.get("ai_btn_summarize",   "").strip() or "📝 Summarize",
         _cms.get("ai_btn_findings",    "").strip() or "🔍 Key Findings",
@@ -686,15 +687,19 @@ if not _enabled_quick_btns:
         for lbl, action in zip(_legacy_labels, [a for _, a in _DEFAULT_QUICK_BTNS])
     ]
 
+_KNOWN_ACTIONS = ("summarize", "findings", "methodology", "implications")
 _btn_cols = st.columns(max(len(_enabled_quick_btns), 1))
 for _col, _btn in zip(_btn_cols, _enabled_quick_btns):
     _btn_label  = _btn.get("label", "").strip() or "Action"
     _btn_action = _btn.get("prompt", "").strip()
-    # Map prompt string to known action keys; treat as custom prompt otherwise
-    _action_key = _btn_action if _btn_action in ("summarize", "findings", "methodology", "implications") else _btn_label.lower()
     with _col:
         if st.button(_btn_label, use_container_width=True, disabled=not paper or not _ai_available):
-            st.session_state.pending_action = _action_key
+            if _btn_action in _KNOWN_ACTIONS:
+                st.session_state.pending_action = _btn_action
+                st.session_state.pending_prompt = ""
+            else:
+                st.session_state.pending_action = "custom_prompt"
+                st.session_state.pending_prompt = _btn_action or _btn_label
 
 if st.session_state.pending_action and paper:
     action = st.session_state.pending_action
@@ -705,34 +710,43 @@ if st.session_state.pending_action and paper:
         "methodology":  "📊 Methodology",
         "implications": "🔗 Implications",
     }
-    label = labels.get(action, action.title())
+    label = labels.get(action, "💬 Analysis")
     st.markdown(section_title_html(label), unsafe_allow_html=True)
 
-    # Check if result is already cached
-    cache_key = _paper_cache_key(paper, action)
-    is_cached = cache_key in st.session_state["ai_cache"]
+    if action == "custom_prompt":
+        _custom_prompt = st.session_state.get("pending_prompt", "Analyze this paper.")
+        st.session_state.pending_prompt = ""
+        _system = _get_system_base() + _paper_context(paper)
+        _msgs_custom = [{"role": "user", "content": _custom_prompt}]
+        with st.spinner("Analyzing…"):
+            _cust_container = st.empty()
+            _stream_response_into_container(_msgs_custom, "free_chat")
+    else:
+        # Check if result is already cached
+        cache_key = _paper_cache_key(paper, action)
+        is_cached = cache_key in st.session_state["ai_cache"]
 
-    if is_cached:
-        st.caption("✓ Loaded from session cache — no API call needed")
+        if is_cached:
+            st.caption("✓ Loaded from session cache — no API call needed")
 
-    with st.spinner("Analyzing…" if not is_cached else ""):
-        validated, raw, error = get_structured_response(action, paper)
+        with st.spinner("Analyzing…" if not is_cached else ""):
+            validated, raw, error = get_structured_response(action, paper)
 
-    st.session_state.last_action_label = label
-    st.session_state.last_action_result = validated
+        st.session_state.last_action_label = label
+        st.session_state.last_action_result = validated
 
-    if error:
-        st.warning(f"⚠️ {error}")
-    elif validated:
-        render_structured(validated)
-    elif raw:
-        st.markdown(
-            _card(
-                f'<div style="font-size:0.88rem;line-height:1.7;color:{colors["text"]}">'
-                f'{html.escape(raw)}</div>'
-            ),
-            unsafe_allow_html=True,
-        )
+        if error:
+            st.warning(f"⚠️ {error}")
+        elif validated:
+            render_structured(validated)
+        elif raw:
+            st.markdown(
+                _card(
+                    f'<div style="font-size:0.88rem;line-height:1.7;color:{colors["text"]}">'
+                    f'{html.escape(raw)}</div>'
+                ),
+                unsafe_allow_html=True,
+            )
 
 
 # ── Conversation History ──────────────────────────────────────────────────────

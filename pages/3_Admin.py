@@ -23,7 +23,7 @@ from utils.security import (
 from utils.email_service import send_otp_email
 from utils.hf_data import (
     get_active_researchers, add_researcher, remove_researcher,
-    load_publications, sync_from_openalex, load_researchers,
+    load_publications, sync_from_openalex, sync_by_display_name, load_researchers,
     flush_audit_log, flush_error_log,
     load_ai_settings, save_ai_settings,
     load_cms_content, save_cms_content,
@@ -65,13 +65,14 @@ for key, default in [
 # ============================================
 
 _admin_hero = _cms.get("admin_hero", {})
-st.markdown(
-    hero_html(
-        _admin_hero.get("title", "").strip() or "🔐 Administrator Panel",
-        _admin_hero.get("subtitle", "").strip() or "Secure system management & audit console",
-    ),
-    unsafe_allow_html=True,
-)
+if _admin_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _admin_hero.get("title", "").strip() or "🔐 Administrator Panel",
+            _admin_hero.get("subtitle", "").strip() or "Secure system management & audit console",
+        ),
+        unsafe_allow_html=True,
+    )
 
 # Support both flat env vars (ADMIN_EMAIL / ADMIN_PASSWORD) and nested secrets
 admin_email    = (get_secret("ADMIN_EMAIL")    or get_nested_secret("admin", "email",    "")).lower().strip()
@@ -455,6 +456,22 @@ else:
                     st.write(r)
                 log_audit("sync_all_researchers")
                 st.success("Sync complete.")
+
+            st.markdown("---")
+            st.markdown("**Sync by Author Name** (for researchers without ORCID)")
+            _name_col1, _name_col2 = st.columns(2)
+            _name_input = _name_col1.text_input("Display name", placeholder="AA Alfadda", key="admin_sync_name")
+            _name_orcid = _name_col2.text_input("Link to ORCID (optional)", placeholder="0000-0000-0000-0000",
+                                                 key="admin_sync_name_orcid")
+            if st.button("🔎 Search & Import by Name", key="admin_btn_sync_name", type="primary",
+                         disabled=not _name_input.strip()):
+                with st.spinner(f"Searching for '{_name_input}'…"):
+                    count, err = sync_by_display_name(_name_input.strip(), linked_orcid=_name_orcid.strip())
+                if err:
+                    st.error(f"❌ {err}")
+                else:
+                    st.success(f"✅ Imported {count} new publication(s) for '{_name_input}'")
+                    log_audit("sync_by_name", f"admin: {_name_input[:30]}")
         else:
             st.info("No researchers added yet.")
 

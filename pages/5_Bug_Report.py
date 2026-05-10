@@ -34,13 +34,14 @@ if "github_url" not in st.session_state:
 # ============================================
 
 _bug_hero = _cms.get("bug_report_hero", {})
-st.markdown(
-    hero_html(
-        _bug_hero.get("title", "").strip() or "🐛 Bug Report",
-        _bug_hero.get("subtitle", "").strip() or "Help us improve by reporting issues you encounter",
-    ),
-    unsafe_allow_html=True,
-)
+if _bug_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _bug_hero.get("title", "").strip() or "🐛 Bug Report",
+            _bug_hero.get("subtitle", "").strip() or "Help us improve by reporting issues you encounter",
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 if st.session_state.bug_submitted:

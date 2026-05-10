@@ -37,12 +37,13 @@ _cms = st.session_state.get("_cms_override") or load_cms_content()
 _hero = _cms.get("home_hero", {})
 _hero_title    = _hero.get("title",    "").strip() or "🔬 ORC Research Dashboard"
 _hero_subtitle = _hero.get("subtitle", "").strip() or "Academic Analytics & Publication Intelligence Platform"
-st.markdown(hero_html(_hero_title, _hero_subtitle), unsafe_allow_html=True)
+if _hero.get("enabled", True):
+    st.markdown(hero_html(_hero_title, _hero_subtitle), unsafe_allow_html=True)
 
 # ── Announcement banners ─────────────────────────────────────────────────────
 _announcements = _cms.get("announcements", [])
-# Migration: also check old single announcement
-if not _announcements:
+# Migration: only fall back to legacy key when new key is absent from CMS data
+if "announcements" not in _cms:
     _old_ann = _cms.get("home_announcement", {})
     if _old_ann.get("enabled") and _old_ann.get("text", "").strip():
         _announcements = [{"text": _old_ann["text"], "color": _old_ann.get("color", "info"), "enabled": True}]

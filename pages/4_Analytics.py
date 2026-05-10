@@ -28,13 +28,14 @@ colors = DARK if get_theme() == "dark" else LIGHT
 _cms = st.session_state.get("_cms_override") or load_cms_content()
 
 _analytics_hero = _cms.get("analytics_hero", {})
-st.markdown(
-    hero_html(
-        _analytics_hero.get("title", "").strip() or "📈 Analytics",
-        _analytics_hero.get("subtitle", "").strip() or "Research metrics, publication trends, and collaboration insights",
-    ),
-    unsafe_allow_html=True,
-)
+if _analytics_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _analytics_hero.get("title", "").strip() or "📈 Analytics",
+            _analytics_hero.get("subtitle", "").strip() or "Research metrics, publication trends, and collaboration insights",
+        ),
+        unsafe_allow_html=True,
+    )
 
 # ── Researcher Filter ────────────────────────────────────────────────────────
 researchers = get_active_researchers()
@@ -126,8 +127,8 @@ with col1:
             _ly["legend"] = dict(font=dict(color=colors["text2"]), bgcolor="rgba(0,0,0,0)")
             fig.update_layout(**_ly)
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    except Exception as e:
-        st.info("Publications by Year chart unavailable — data could not be loaded.")
+    except (KeyError, ValueError, TypeError) as e:
+        st.info(f"Publications by Year chart unavailable — {e}")
 
 with col2:
     try:
@@ -141,8 +142,8 @@ with col2:
                          color_discrete_sequence=[ccs[2]])
             fig.update_layout(**chart_layout("Citation Impact by Year"))
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    except Exception as e:
-        st.info("Citation Impact chart unavailable — data could not be loaded.")
+    except (KeyError, ValueError, TypeError) as e:
+        st.info(f"Citation Impact chart unavailable — {e}")
 
 
 # ── Most Cited Papers ────────────────────────────────────────────────────────
@@ -164,8 +165,8 @@ try:
         layout["coloraxis_showscale"] = False
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-except Exception as e:
-    st.info("Most Cited Papers chart unavailable — data could not be loaded.")
+except (KeyError, ValueError, TypeError) as e:
+    st.info(f"Most Cited Papers chart unavailable — {e}")
 
 
 # ── Research Collaborations ──────────────────────────────────────────────────
@@ -199,8 +200,8 @@ with col1:
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.info("No co-author data available.")
-    except Exception:
-        st.info("Co-author chart unavailable.")
+    except (KeyError, ValueError, TypeError) as e:
+        st.info(f"Co-author chart unavailable — {e}")
 
 with col2:
     try:
@@ -216,8 +217,8 @@ with col2:
             st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.info("Open access data not available.")
-    except Exception:
-        st.info("Open access chart unavailable.")
+    except (KeyError, ValueError, TypeError) as e:
+        st.info(f"Open access chart unavailable — {e}")
 
 # Journal distribution
 try:
@@ -233,8 +234,8 @@ try:
         layout["coloraxis_showscale"] = False
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-except Exception:
-    st.info("Journal distribution chart unavailable.")
+except (KeyError, ValueError, TypeError) as e:
+    st.info(f"Journal distribution chart unavailable — {e}")
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────

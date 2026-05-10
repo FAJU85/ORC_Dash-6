@@ -78,13 +78,14 @@ if "current_page" not in st.session_state:
 # ============================================
 
 _pub_hero = _cms.get("publications_hero", {})
-st.markdown(
-    hero_html(
-        _pub_hero.get("title", "").strip() or "📚 Publications",
-        _pub_hero.get("subtitle", "").strip() or "Browse, search, and export your research portfolio",
-    ),
-    unsafe_allow_html=True,
-)
+if _pub_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _pub_hero.get("title", "").strip() or "📚 Publications",
+            _pub_hero.get("subtitle", "").strip() or "Browse, search, and export your research portfolio",
+        ),
+        unsafe_allow_html=True,
+    )
 
 # ── Sync Section ────────────────────────────────────────────────────────────
 st.markdown(section_title_html("Sync Publications"), unsafe_allow_html=True)
@@ -110,6 +111,28 @@ else:
         f'</div>',
         unsafe_allow_html=True,
     )
+
+if can_sync_publications():
+    with st.expander("🔍 Search by Author Name", expanded=False):
+        st.caption("Find publications for authors without an ORCID by searching OpenAlex by display name.")
+        name_input = st.text_input("Author display name", placeholder="AA Alfadda", key="sync_name_input")
+        link_orcid_input = st.text_input("Link to researcher ORCID (optional)", placeholder="0000-0000-0000-0000",
+                                          key="sync_name_link_orcid")
+        if st.button("🔎 Search & Import", type="primary", key="btn_sync_name",
+                     disabled=not name_input.strip()):
+            allowed, wait_time = rate_limiter.is_allowed(f"sync_name_{name_input[:20]}", max_attempts=3, window_seconds=300)
+            if not allowed:
+                st.error(f"⚠️ Rate limited. Wait {wait_time}s.")
+            else:
+                rate_limiter.record_attempt(f"sync_name_{name_input[:20]}")
+                with st.spinner(f"Searching OpenAlex for '{name_input}'…"):
+                    from utils.hf_data import sync_by_display_name
+                    count, err = sync_by_display_name(name_input.strip(), linked_orcid=link_orcid_input.strip())
+                if err:
+                    st.error(f"❌ {err}")
+                else:
+                    st.success(f"✅ Imported {count} new publication(s) for '{name_input}'")
+                    log_audit("sync_by_name", f"name:{name_input[:30]}, count:{count}")
 
 # ── Load all publications ───────────────────────────────────────────────────
 pubs, error = execute_query(
@@ -300,9 +323,9 @@ for pub in page_items:
     )
 
     # Action buttons — compact row beneath the card
-    btn_cols = st.columns([1, 2, 7]) if doi else st.columns([1, 9])
+    btn_cols = st.columns([2, 2, 6]) if doi else st.columns([2, 8])
     with btn_cols[0]:
-        if st.button("🔬", key=f"a_{pub_id}", help="Analyze with AI Assistant"):
+        if st.button("🔬 Analyze", key=f"a_{pub_id}", help="Analyze with AI Assistant"):
             st.session_state.selected_paper = {
                 "id": pub_id,
                 "title": title,

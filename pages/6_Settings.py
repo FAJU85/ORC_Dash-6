@@ -39,13 +39,14 @@ if "confirm_reset_settings" not in st.session_state:
 # ============================================
 
 _settings_hero = _cms.get("settings_hero", {})
-st.markdown(
-    hero_html(
-        _settings_hero.get("title", "").strip() or "⚙️ Settings",
-        _settings_hero.get("subtitle", "").strip() or "Customize your dashboard preferences and export publications",
-    ),
-    unsafe_allow_html=True,
-)
+if _settings_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _settings_hero.get("title", "").strip() or "⚙️ Settings",
+            _settings_hero.get("subtitle", "").strip() or "Customize your dashboard preferences and export publications",
+        ),
+        unsafe_allow_html=True,
+    )
 
 # Load a small sample for the inline citation preview (cheap, cached by Streamlit)
 from utils.security import execute_query as _eq

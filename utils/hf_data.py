@@ -183,26 +183,31 @@ _CMS_DEFAULTS: dict = {
     # Global
     "site_title":   "",
     "site_tagline": "",
-    # Home (backward-compat keys kept)
-    "home_announcement": {"enabled": False, "text": "", "color": "info"},
-    "home_hero":         {"title": "", "subtitle": ""},
+    # Home
+    "announcements": [],   # List of {"id": str, "text": str, "color": "info|warning|success", "enabled": bool}
+    "home_hero":         {"title": "", "subtitle": "", "enabled": True},
     # Per-page heroes
-    "publications_hero":   {"title": "", "subtitle": ""},
-    "ai_assistant_hero":   {"title": "", "subtitle": ""},
-    "analytics_hero":      {"title": "", "subtitle": ""},
-    "bioinformatics_hero": {"title": "", "subtitle": ""},
-    "settings_hero":       {"title": "", "subtitle": ""},
-    "bug_report_hero":     {"title": "", "subtitle": ""},
-    "admin_hero":          {"title": "", "subtitle": ""},
+    "publications_hero":   {"title": "", "subtitle": "", "enabled": True},
+    "ai_assistant_hero":   {"title": "", "subtitle": "", "enabled": True},
+    "analytics_hero":      {"title": "", "subtitle": "", "enabled": True},
+    "bioinformatics_hero": {"title": "", "subtitle": "", "enabled": True},
+    "settings_hero":       {"title": "", "subtitle": "", "enabled": True},
+    "bug_report_hero":     {"title": "", "subtitle": "", "enabled": True},
+    "admin_hero":          {"title": "", "subtitle": "", "enabled": True},
     # AI Assistant specifics
     "ai_welcome_message":   "",
+    "ai_welcome_enabled":   True,
     "ai_input_placeholder": "",
+    "ai_quick_buttons": [],  # List of {"id": str, "label": str, "prompt": str, "enabled": bool}
+    # Footer
+    "footer_note": "",
+    "footer_note_enabled": True,
+    # Legacy keys kept for migration
+    "home_announcement": {"enabled": False, "text": "", "color": "info"},
     "ai_btn_summarize":     "",
     "ai_btn_findings":      "",
     "ai_btn_methodology":   "",
     "ai_btn_implications":  "",
-    # Footer
-    "footer_note": "",
 }
 
 @st.cache_data(ttl=120)
@@ -218,15 +223,54 @@ def load_cms_content() -> dict:
         incoming = data.get(key)
         if incoming is None:
             continue
+        # Lists are accepted as-is (announcements, ai_quick_buttons)
+        if isinstance(default_val, list):
+            if isinstance(incoming, list):
+                merged[key] = incoming
+            continue
         if not isinstance(incoming, type(default_val)):
             continue  # wrong type — keep default
         if isinstance(default_val, dict):
-            # Validate sub-keys too: accept only if it's a proper dict
+            # Merge sub-keys, but allow extra keys (e.g. "enabled" added later)
             if isinstance(incoming, dict):
-                merged[key] = {**default_val, **{k: v for k, v in incoming.items()
-                                                  if k in default_val}}
+                merged[key] = {**default_val, **incoming}
         else:
             merged[key] = incoming
+
+    # ── Migration: old single home_announcement → announcements list ──────────
+    if "announcements" not in data:
+        old_ann = merged.get("home_announcement", {})
+        if old_ann.get("enabled") and old_ann.get("text", "").strip():
+            import uuid as _uuid
+            merged["announcements"] = [{
+                "id":      _uuid.uuid4().hex[:8],
+                "text":    old_ann["text"],
+                "color":   old_ann.get("color", "info"),
+                "enabled": True,
+            }]
+
+    # ── Migration: old ai_btn_* keys → ai_quick_buttons list ─────────────────
+    if "ai_quick_buttons" not in data:
+        import uuid as _uuid
+        _old_btns = [
+            ("ai_btn_summarize",    "📝 Summarize",    "Summarize this paper"),
+            ("ai_btn_findings",     "🔍 Key Findings", "What are the key findings?"),
+            ("ai_btn_methodology",  "📊 Methodology",  "Describe the methodology"),
+            ("ai_btn_implications", "🔗 Implications", "What are the implications?"),
+        ]
+        migrated = []
+        for key, default_label, default_prompt in _old_btns:
+            val = merged.get(key, "").strip()
+            if val:
+                migrated.append({
+                    "id":      _uuid.uuid4().hex[:8],
+                    "label":   val,
+                    "prompt":  default_prompt,
+                    "enabled": True,
+                })
+        if migrated:
+            merged["ai_quick_buttons"] = migrated
+
     return merged
 
 
@@ -512,6 +556,80 @@ def sync_from_openalex(orcid: str, force: bool = False) -> tuple[int, str | None
 
     except Exception as e:
         return 0, str(e)
+
+def sync_by_display_name(display_name: str, linked_orcid: str = "", force: bool = False) -> tuple[int, str | None]:
+    """Search OpenAlex for works by author display name and save new ones."""
+    import requests
+    import urllib.parse
+    display_name = display_name.strip()
+    if not display_name:
+        return 0, "Display name is required"
+
+    url = (
+        "https://api.openalex.org/works"
+        f"?filter=author.display_name.search:{urllib.parse.quote(display_name)}"
+        "&per_page=100&sort=cited_by_count:desc"
+    )
+    try:
+        resp = requests.get(url, headers={"User-Agent": "ORC-Dashboard/1.0"}, timeout=20)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+    except Exception as exc:
+        return 0, f"OpenAlex request failed: {exc}"
+
+    existing = {p.get("doi", "").lower() for p in load_publications() if p.get("doi")}
+    orcid_key = linked_orcid.strip() or f"name:{display_name}"
+
+    new_pubs = []
+    for work in results:
+        doi = (work.get("doi") or "").replace("https://doi.org/", "").lower()
+        if doi and doi in existing:
+            continue
+        # Build publication record matching the schema from sync_from_openalex
+        oa_info = work.get("open_access") or {}
+        best_location = (work.get("primary_location") or {})
+        source = (best_location.get("source") or {})
+        abstract = ""
+        abstract_inv = work.get("abstract_inverted_index")
+        if abstract_inv:
+            try:
+                positions = sorted(
+                    ((pos, word) for word, positions in abstract_inv.items() for pos in positions),
+                    key=lambda x: x[0],
+                )
+                abstract = " ".join(word for _, word in positions)
+            except Exception:
+                pass
+        authors = [
+            {"name": a.get("author", {}).get("display_name", ""), "orcid": a.get("author", {}).get("orcid", "")}
+            for a in (work.get("authorships") or [])
+        ]
+        pub = {
+            "id":               work.get("id", "").replace("https://openalex.org/", ""),
+            "title":            (work.get("title") or "").strip(),
+            "doi":              doi,
+            "publication_year": work.get("publication_year"),
+            "citation_count":   work.get("cited_by_count", 0),
+            "open_access":      bool(oa_info.get("is_oa", False)),
+            "journal_name":     source.get("display_name", ""),
+            "authors":          authors,
+            "abstract":         abstract,
+            "orcid":            orcid_key,
+            "source":           "openalex_name_search",
+        }
+        if pub["title"]:
+            new_pubs.append(pub)
+
+    if not new_pubs:
+        return 0, None
+
+    all_pubs = load_publications()
+    all_pubs.extend(new_pubs)
+    ok, err = save_publications(all_pubs)
+    if not ok:
+        return 0, err
+    load_publications.clear()
+    return len(new_pubs), None
 
 # ============================================
 # AUDIT LOG PERSISTENCE

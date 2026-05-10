@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 import requests
 
-from utils.security import get_secret, log_audit, log_error, RateLimiter
+from utils.security import get_secret, log_audit, log_error, RateLimiter, is_admin_authenticated
 from utils.hf_data import load_cms_content
 from utils.styles import (
     apply_styles, get_theme, hero_html, section_title_html,
@@ -158,18 +158,21 @@ def _genome_post(endpoint: str, body: dict) -> tuple[dict | None, str | None]:
         resp = requests.post(url, headers=_GENOME_HEADERS, json=body, timeout=30)
         if resp.status_code == 401:
             return None, (
-                "Invalid or missing API key. "
-                "Add **ALPHA_GENOME_API_KEY** to your space secrets."
+                "Authentication failed. Contact the system administrator."
+                if not is_admin_authenticated()
+                else "Authentication failed — check ALPHA_GENOME_API_KEY in your secrets."
             )
         if resp.status_code == 403:
             return None, (
-                "Access denied. Your API key may not have permission for this endpoint."
+                "Access denied. Contact the system administrator."
+                if not is_admin_authenticated()
+                else "Access denied — API key lacks permission for this endpoint."
             )
         if resp.status_code == 404:
             return None, (
-                "Genomic analysis endpoint not found. "
-                "This service requires approved API access — "
-                "verify **ALPHA_GENOME_BASE_URL** in your secrets or contact your API provider."
+                "Service endpoint not found. Contact the system administrator."
+                if not is_admin_authenticated()
+                else "Service endpoint not found — verify ALPHA_GENOME_BASE_URL in your secrets."
             )
         if resp.status_code == 400:
             try:
@@ -183,8 +186,9 @@ def _genome_post(endpoint: str, body: dict) -> tuple[dict | None, str | None]:
         return None, "Request timed out — try a shorter sequence."
     except requests.ConnectionError:
         return None, (
-            "Cannot reach the genomic analysis service. "
-            "Check your network connection or **ALPHA_GENOME_BASE_URL**."
+            "Cannot reach the genomic analysis service. Please try again later."
+            if not is_admin_authenticated()
+            else "Cannot reach the service — check your network connection or ALPHA_GENOME_BASE_URL."
         )
     except requests.RequestException as exc:
         log_error("genome_api", str(exc), page="Bioinformatics")
@@ -232,13 +236,14 @@ def _analyse_region(chrom: str, start: int, end: int,
 # ══════════════════════════════════════════════════════════════════════════════
 
 _bio_hero = _cms.get("bioinformatics_hero", {})
-st.markdown(
-    hero_html(
-        _bio_hero.get("title", "").strip() or "🧬 Bioinformatics",
-        _bio_hero.get("subtitle", "").strip() or "Protein structure prediction · Genomic sequence & variant analysis",
-    ),
-    unsafe_allow_html=True,
-)
+if _bio_hero.get("enabled", True):
+    st.markdown(
+        hero_html(
+            _bio_hero.get("title", "").strip() or "🧬 Bioinformatics",
+            _bio_hero.get("subtitle", "").strip() or "Protein structure prediction · Genomic sequence & variant analysis",
+        ),
+        unsafe_allow_html=True,
+    )
 
 tab_protein, tab_genomics = st.tabs(["🔬 Protein Structure", "🧪 Genomic Analysis"])
 
@@ -388,11 +393,13 @@ with tab_protein:
 with tab_genomics:
 
     if not _GENOME_KEY:
-        st.warning(
-            "⚠️ Genomic analysis requires an API key. "
-            "Add **ALPHA_GENOME_API_KEY** (and optionally **ALPHA_GENOME_BASE_URL**) "
-            "to your space secrets to enable this tab."
-        )
+        if is_admin_authenticated():
+            st.warning(
+                "⚠️ Genomic analysis is not configured — "
+                "add ALPHA_GENOME_API_KEY (and optionally ALPHA_GENOME_BASE_URL) to your secrets."
+            )
+        else:
+            st.info("⚠️ Genomic analysis is not available. Contact the administrator to enable this feature.")
 
     seq_tab, var_tab, reg_tab = st.tabs(
         ["🧬 Sequence", "🔀 Variant Effect", "📍 Genomic Region"]
@@ -563,10 +570,12 @@ with tab_genomics:
             f'to DNA sequences to predict gene expression, chromatin accessibility, '
             f'histone modifications, transcription factor binding, and variant effects — '
             f'without wet-lab experiments.'
-            f'<br><br>'
-            f'Add <code>ALPHA_GENOME_API_KEY</code> (and optionally '
-            f'<code>ALPHA_GENOME_BASE_URL</code>) to your space secrets to enable live queries.'
-            f'</div>',
+            + (
+                '<br><br>Contact your system administrator to configure API access for live queries.'
+                if not is_admin_authenticated()
+                else '<br><br>Configure ALPHA_GENOME_API_KEY (and optionally ALPHA_GENOME_BASE_URL) in your secrets to enable live queries.'
+            )
+            + '</div>',
             unsafe_allow_html=True,
         )
 

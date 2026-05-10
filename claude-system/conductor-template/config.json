@@ -1,0 +1,12 @@
+{
+  "mode": "agentic",
+  "max_fix_cycles": 3,
+  "planning_model": "claude-opus-4-6",
+  "execution_model": "claude-sonnet-4-6",
+  "board_required_for": [
+    "deployment",
+    "db_migration",
+    "breaking_api",
+    "security_change"
+  ]
+}

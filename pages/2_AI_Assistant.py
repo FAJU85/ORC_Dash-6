@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pydantic import ValidationError
 from utils.ai_schemas import (
     AIRequest, PaperContext, ACTION_PROMPTS, parse_action_response,
-    PaperSummary, KeyFindings, Methodology, Implications,
+    PaperSummary, KeyFindings, Methodology, Implications, ComparisonResult,
 )
 from utils.security import get_secret, execute_query, log_audit, log_error, RateLimiter
 from utils.styles import (
@@ -23,7 +23,7 @@ from utils.styles import (
     footer_html, render_navbar, DARK, LIGHT,
 )
 from utils.prompt_builder import build_system_prompt
-from utils.hf_data import load_ai_settings, load_cms_content
+from utils.hf_data import load_ai_settings, load_cms_content, load_conversations, save_conversations
 from utils.model_router import classify_task, route_model, ModelDecision, STRUCTURED_MODEL
 
 apply_styles()
@@ -206,7 +206,7 @@ def get_ai_response(message: str, paper: dict | None = None) -> tuple[str | None
         system += _paper_context(paper)
 
     messages: list[dict] = [{"role": "system", "content": system}]
-    for m in st.session_state.get("chat_history", [])[-6:]:
+    for m in st.session_state.get("chat_history", [])[-12:]:
         messages.append({"role": m["role"], "content": m["content"]})
     messages.append({"role": "user", "content": req.message})
 
@@ -246,13 +246,19 @@ def _build_chat_messages(message: str, paper: dict | None) -> tuple[list[dict], 
 
     file_ctx = st.session_state.get("uploaded_file_context", "")
     if file_ctx:
-        system += f"\n\nAttached document content:\n{file_ctx[:4000]}"
+        system += f"\n\nAttached document content:\n{file_ctx}"
 
     if paper:
         system += _paper_context(paper)
 
+    # Inline citation hint
+    system += (
+        "\n\nWhen referencing papers from the knowledge base, cite them as "
+        "[Author, Year] or by title. Ground factual claims in the provided publications."
+    )
+
     msgs: list[dict] = [{"role": "system", "content": system}]
-    for m in st.session_state.get("chat_history", [])[-6:]:
+    for m in st.session_state.get("chat_history", [])[-12:]:
         msgs.append({"role": m["role"], "content": m["content"]})
     msgs.append({"role": "user", "content": message})
     return msgs, None
@@ -353,6 +359,43 @@ def get_structured_response(action: str, paper: dict) -> tuple[PaperSummary | Ke
         return None, None, "AI service temporarily unavailable"
 
 
+def get_comparison_response(papers: list[dict]) -> tuple[ComparisonResult | None, str | None]:
+    """Run a structured multi-paper comparison using the ComparisonResult schema."""
+    allowed, wait = _rate_check("structured")
+    if not allowed:
+        return None, f"Rate limit exceeded — wait {wait}s"
+    client, err = _groq_client()
+    if not client:
+        return None, err
+
+    combined_ctx = "\n\n".join(_paper_context(p) for p in papers)
+    json_schema, _ = ACTION_PROMPTS["compare"]
+    system = (
+        _get_system_base()
+        + "\n\nRespond with valid JSON only.\n\n"
+        + json_schema
+        + combined_ctx
+    )
+    model = get_secret("AI_MODEL") or STRUCTURED_MODEL
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Compare these {len(papers)} papers and return the JSON."},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=2000,
+        )
+        raw = resp.choices[0].message.content
+        validated = parse_action_response("compare", raw)
+        log_audit("ai_structured", f"action=compare model={model} papers={len(papers)}")
+        return validated, None
+    except Exception:
+        return None, "AI service temporarily unavailable"
+
+
 # ── Export helpers ────────────────────────────────────────────────────────────
 
 def _result_to_markdown(action: str, result) -> str:
@@ -386,6 +429,12 @@ def _result_to_markdown(action: str, result) -> str:
         if result.policy:
             lines += ["**Policy**"] + [f"- {i}" for i in result.policy] + [""]
         lines += ["", f"**Summary:** {result.summary}"]
+    elif isinstance(result, ComparisonResult):
+        lines += ["**Similarities**"] + [f"- {s}" for s in result.similarities] + [""]
+        lines += ["**Differences**"] + [f"- {d}" for d in result.differences] + [""]
+        lines += [f"**Methodology Notes**\n{result.methodological_notes}", ""]
+        lines += [f"**Combined Implications**\n{result.combined_implications}", ""]
+        lines += [f"**Reading Order**\n{result.recommended_reading_order}"]
     return "\n".join(lines)
 
 
@@ -533,12 +582,39 @@ def render_structured(result: PaperSummary | KeyFindings | Methodology | Implica
             unsafe_allow_html=True,
         )
 
+    elif isinstance(result, ComparisonResult):
+        c1, c2 = st.columns(2)
+        with c1:
+            _label("Similarities")
+            _bullet(result.similarities)
+        with c2:
+            _label("Differences")
+            _bullet(result.differences)
+        _label("Methodological Notes")
+        st.markdown(
+            f'<div style="font-size:0.88rem;color:{colors["text"]};line-height:1.65">'
+            f'{html.escape(result.methodological_notes)}</div>',
+            unsafe_allow_html=True,
+        )
+        _label("Combined Implications")
+        st.markdown(
+            _card(
+                f'<div style="font-size:0.88rem;color:{colors["text"]};line-height:1.65">'
+                f'{html.escape(result.combined_implications)}</div>',
+                border_color=colors["accent"],
+            ),
+            unsafe_allow_html=True,
+        )
+        _label("Recommended Reading Order")
+        st.info(result.recommended_reading_order)
+
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
 for key, val in [
     ("chat_history", []),
     ("pending_action", None),
+    ("pending_prompt", ""),
     ("ai_cache", {}),
     ("last_action_label", ""),
     ("last_action_result", None),
@@ -549,12 +625,24 @@ for key, val in [
     ("uploaded_file_name", ""),
     ("conversation_sessions", {}),
     ("current_session_name", "Session 1"),
+    ("selected_papers", []),
+    ("_conv_loaded_from_hf", False),
     ("_ai_last_model", ""),
     ("_ai_last_task_type", ""),
     ("_ai_last_reason", ""),
 ]:
     if key not in st.session_state:
         st.session_state[key] = val
+
+# Load persistent conversations from HF on first page visit
+if not st.session_state._conv_loaded_from_hf:
+    try:
+        _hf_sessions = load_conversations()
+        if _hf_sessions:
+            st.session_state.conversation_sessions.update(_hf_sessions)
+    except Exception:
+        pass
+    st.session_state._conv_loaded_from_hf = True
 
 
 # ── Page ──────────────────────────────────────────────────────────────────────
@@ -611,30 +699,43 @@ except Exception:
     pass
 
 
-# ── Paper context card ────────────────────────────────────────────────────────
+# ── Paper context panel (multi-paper) ────────────────────────────────────────
 
 paper = st.session_state.get("selected_paper")
+
+# Sync single selected_paper into multi-select list
 if paper:
-    citations = paper.get("citation_count", 0) or 0
-    c1, c2 = st.columns([8, 1])
-    with c1:
-        st.markdown(
-            _card(
-                f'<div style="font-weight:600;font-size:0.95rem;color:{colors["text"]}">'
-                f'{html.escape(str(paper.get("title", "Unknown")))}</div>'
-                f'<div style="font-size:0.8rem;color:{colors["text2"]};margin-top:0.25rem">'
-                f'📰 {html.escape(str(paper.get("journal_name", "")))} &nbsp;·&nbsp; '
-                f'{paper.get("publication_year", "")} &nbsp;·&nbsp; '
-                f'{citations:,} citations</div>',
-                border_color=colors["accent"],
-            ),
-            unsafe_allow_html=True,
-        )
-    with c2:
-        st.write("")
-        if st.button("✕ Clear", use_container_width=True):
-            st.session_state.selected_paper = None
-            st.rerun()
+    _pid = paper.get("id", "")
+    if not any(p.get("id") == _pid for p in st.session_state.selected_papers):
+        st.session_state.selected_papers.append(paper)
+
+if st.session_state.selected_papers:
+    for _idx, _p in enumerate(list(st.session_state.selected_papers)):
+        _cits = _p.get("citation_count", 0) or 0
+        _pc1, _pc2 = st.columns([9, 1])
+        with _pc1:
+            st.markdown(
+                _card(
+                    f'<div style="font-weight:600;font-size:0.93rem;color:{colors["text"]}">'
+                    f'{html.escape(str(_p.get("title", "Unknown")))}</div>'
+                    f'<div style="font-size:0.78rem;color:{colors["text2"]};margin-top:0.2rem">'
+                    f'📰 {html.escape(str(_p.get("journal_name", "")))} &nbsp;·&nbsp; '
+                    f'{_p.get("publication_year", "")} &nbsp;·&nbsp; '
+                    f'{_cits:,} citations</div>',
+                    border_color=colors["accent"],
+                ),
+                unsafe_allow_html=True,
+            )
+        with _pc2:
+            st.write("")
+            if st.button("✕", key=f"_rm_paper_{_idx}", use_container_width=True,
+                         help="Remove from analysis"):
+                st.session_state.selected_papers.pop(_idx)
+                if not st.session_state.selected_papers:
+                    st.session_state.selected_paper = None
+                else:
+                    st.session_state.selected_paper = st.session_state.selected_papers[0]
+                st.rerun()
 else:
     st.markdown(
         f'<div style="background:{colors["surface"]};border-radius:6px;'
@@ -688,7 +789,8 @@ if "ai_quick_buttons" not in _cms:
     ]
 
 _KNOWN_ACTIONS = ("summarize", "findings", "methodology", "implications")
-_btn_cols = st.columns(max(len(_enabled_quick_btns), 1))
+_btn_cols_count = max(len(_enabled_quick_btns) + 1, 1)  # +1 for Compare
+_btn_cols = st.columns(_btn_cols_count)
 for _col, _btn in zip(_btn_cols, _enabled_quick_btns):
     _btn_label  = _btn.get("label", "").strip() or "Action"
     _btn_action = _btn.get("prompt", "").strip()
@@ -701,7 +803,19 @@ for _col, _btn in zip(_btn_cols, _enabled_quick_btns):
                 st.session_state.pending_action = "custom_prompt"
                 st.session_state.pending_prompt = _btn_action or _btn_label
 
-if st.session_state.pending_action and paper:
+# Compare Papers button — enabled when 2+ papers are selected
+_n_papers = len(st.session_state.selected_papers)
+with _btn_cols[len(_enabled_quick_btns)]:
+    if st.button(
+        "🔀 Compare Papers",
+        use_container_width=True,
+        disabled=_n_papers < 2 or not _ai_available,
+        help="Compare selected papers side-by-side" if _n_papers >= 2 else "Add 2+ papers to compare",
+    ):
+        st.session_state.pending_action = "compare"
+        st.session_state.pending_prompt = ""
+
+if st.session_state.pending_action and (paper or st.session_state.selected_papers):
     action = st.session_state.pending_action
     st.session_state.pending_action = None
     labels = {
@@ -709,17 +823,29 @@ if st.session_state.pending_action and paper:
         "findings":     "🔍 Key Findings",
         "methodology":  "📊 Methodology",
         "implications": "🔗 Implications",
+        "compare":      "🔀 Paper Comparison",
     }
     label = labels.get(action, "💬 Analysis")
     st.markdown(section_title_html(label), unsafe_allow_html=True)
 
-    if action == "custom_prompt":
+    if action == "compare":
+        _papers_to_compare = st.session_state.selected_papers
+        if len(_papers_to_compare) < 2:
+            st.warning("⚠️ Add at least 2 papers to compare.")
+        else:
+            with st.spinner(f"Comparing {len(_papers_to_compare)} papers…"):
+                _cmp_result, _cmp_err = get_comparison_response(_papers_to_compare)
+            if _cmp_err:
+                st.warning(f"⚠️ {_cmp_err}")
+            elif _cmp_result:
+                render_structured(_cmp_result)
+
+    elif action == "custom_prompt":
         _custom_prompt = st.session_state.get("pending_prompt", "Analyze this paper.")
         st.session_state.pending_prompt = ""
         _system = _get_system_base() + _paper_context(paper)
         _msgs_custom = [{"role": "user", "content": _custom_prompt}]
         with st.spinner("Analyzing…"):
-            _cust_container = st.empty()
             _stream_response_into_container(_msgs_custom, "free_chat")
     else:
         # Check if result is already cached
@@ -798,7 +924,11 @@ with st.expander(
                     st.session_state.chat_history
                 )
                 st.session_state.current_session_name = _sname
-                st.success(f'Saved as "{_sname}"')
+                _ok, _err = save_conversations(dict(st.session_state.conversation_sessions))
+                if _ok:
+                    st.success(f'Saved as "{_sname}" ✓')
+                else:
+                    st.success(f'Saved as "{_sname}" (session only)')
 
 
 # ── File Upload ───────────────────────────────────────────────────────────────
@@ -820,13 +950,17 @@ with st.expander(
             _ctx = ""
             if _up.type == "application/pdf":
                 try:
-                    from utils.pdf_extractor import extract_text
-                    _ctx, _err = extract_text(_up.read())
+                    from utils.pdf_extractor import extract_text, extract_sections, build_ai_prompt
+                    _raw_text, _err = extract_text(_up.read())
                     if _err:
                         st.warning(f"⚠️ PDF extraction issue: {_err}")
-                        _ctx = _ctx or ""
+                        _ctx = _raw_text or ""
+                    else:
+                        _sections = extract_sections(_raw_text)
+                        _ctx = build_ai_prompt(_sections) if _sections else _raw_text[:4000]
                 except Exception as _exc:
                     st.warning(f"⚠️ Could not extract PDF text: {_exc}")
+                    _ctx = ""
             else:
                 _ctx = (
                     f"[Image attached: {html.escape(_up.name)}. "

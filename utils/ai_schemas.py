@@ -98,6 +98,14 @@ class Implications(BaseModel):
     summary: str
 
 
+class ComparisonResult(BaseModel):
+    similarities: list[str] = Field(description="Key similarities across the papers")
+    differences: list[str] = Field(description="Key differences across the papers")
+    methodological_notes: str = Field(description="Comparison of methodologies used")
+    combined_implications: str = Field(description="What these papers together suggest")
+    recommended_reading_order: str = Field(description="Which to read first and why")
+
+
 # ── JSON prompt templates ─────────────────────────────────────────────────────
 
 ACTION_PROMPTS: dict[str, tuple[str, type[BaseModel]]] = {
@@ -142,10 +150,16 @@ ACTION_PROMPTS: dict[str, tuple[str, type[BaseModel]]] = {
 }""",
         Implications,
     ),
+    "compare": (
+        json.dumps(ComparisonResult.model_json_schema(), indent=2),
+        ComparisonResult,
+    ),
 }
 
 
-def parse_action_response(action: str, raw_json: str) -> Optional[BaseModel]:
+def parse_action_response(
+    action: str, raw_json: str
+) -> Optional[PaperSummary | KeyFindings | Methodology | Implications | ComparisonResult]:
     """Parse and validate a JSON AI response against the action's schema."""
     if action not in ACTION_PROMPTS:
         return None

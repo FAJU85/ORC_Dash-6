@@ -174,6 +174,44 @@ def save_ai_settings(settings: dict) -> tuple[bool, str | None]:
 
 
 # ============================================
+# CONVERSATION SESSIONS
+# ============================================
+
+_CONVERSATIONS_FILE = "conversations.json"
+
+@st.cache_data(ttl=120)
+def load_conversations() -> dict:
+    """Load saved conversation sessions from HF Dataset.
+    Returns dict of {session_name: [{"role": str, "content": str}, ...]}
+    """
+    if not is_hf_configured():
+        return {}
+    data, err = _hf_download_json(_CONVERSATIONS_FILE)
+    if err or not isinstance(data, dict):
+        return {}
+    return data
+
+
+def save_conversations(sessions: dict) -> tuple[bool, str | None]:
+    """Persist conversation sessions to HF Dataset and clear cache.
+    sessions: dict of {session_name: [{"role": str, "content": str}, ...]}
+    """
+    if not is_hf_configured():
+        return False, "Storage not configured — conversations apply for this session only."
+    # Cap at 50 sessions, keep most recent by key order
+    if len(sessions) > 50:
+        sessions = dict(list(sessions.items())[-50:])
+    with _write_lock:
+        ok, err = _hf_upload_json(
+            _CONVERSATIONS_FILE, sessions,
+            commit_message="Update conversation sessions",
+        )
+    if ok:
+        load_conversations.clear()
+    return ok, err
+
+
+# ============================================
 # CMS CONTENT
 # ============================================
 
